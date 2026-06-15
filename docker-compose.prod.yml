@@ -1,8 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/yudhnaa/personal-tracker:latest
     container_name: personal-tracker-app
     restart: unless-stopped
     ports:
