@@ -18,7 +18,7 @@ services:
       redis:
         condition: service_started
     networks:
-      - app-network
+      - default
       - homelab
 
   postgres:
@@ -36,8 +36,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - app-network
+
 
   redis:
     image: redis:7-alpine
@@ -45,15 +44,13 @@ services:
     restart: unless-stopped
     volumes:
       - redis-data-prod:/data
-    networks:
-      - app-network
+
 
 volumes:
   postgres-data-prod:
   redis-data-prod:
 
 networks:
-  app-network:
-    driver: bridge
+
   homelab:
     external: true
