@@ -1,11 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
-
-// Force bundler to trace the migrator dependency for the standalone build
-if (process.env.DUMMY_NEVER_MATCH) {
-  migrate(null as any, { migrationsFolder: "" });
-}
 import * as schema from "./schema";
 
 const connectionString =
