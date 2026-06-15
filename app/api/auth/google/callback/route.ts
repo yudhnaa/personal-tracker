@@ -4,7 +4,8 @@ import { requireUserId } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   const userId = await requireUserId();
-  const redirectUrl = new URL("/dashboard", request.nextUrl.origin);
+  const baseUrl = process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
+  const redirectUrl = new URL("/dashboard", baseUrl);
 
   if (!userId) {
     redirectUrl.pathname = "/login";
