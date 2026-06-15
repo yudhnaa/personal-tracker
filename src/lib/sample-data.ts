@@ -4,15 +4,6 @@ import type { Bookmark } from "../features/bookmarks/use-bookmarks";
 import type { Habit } from "../features/habits/use-habits";
 import type { Task, TaskStatus } from "../features/todo/task-types";
 
-/** Tracker data keys — wiped by "clear", filled by "create sample". */
-const DATA_KEYS = {
-  todos: "pt.todos",
-  note: "pt.note",
-  bookmarks: "pt.bookmarks",
-  groups: "pt.bookmark-groups",
-  habits: "pt.habits",
-} as const;
-
 function isoInDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
@@ -56,9 +47,9 @@ const SAMPLE_BOOKMARKS: [string, string, string][] = [
   ["https://www.netflix.com", "Netflix", "Giải trí"],
 ];
 
-const SAMPLE_GROUPS = ["Hằng ngày", "Tin tức", "Mua sắm", "Nấu ăn", "Giải trí"];
+export const SAMPLE_GROUPS = ["Hằng ngày", "Tin tức", "Mua sắm", "Nấu ăn", "Giải trí"];
 
-const SAMPLE_NOTE = `Việc cần làm tuần này
+export const SAMPLE_NOTE = `Việc cần làm tuần này
 - Đi siêu thị mua đồ ăn cho cả tuần
 - Đặt lịch cắt tóc cuối tuần
 - Nhắc con làm bài tập về nhà
@@ -68,7 +59,7 @@ Cần nhớ
 - Đóng học phí cho con đầu tháng
 - Mang xe đi bảo dưỡng`;
 
-function buildTasks(): Task[] {
+export function buildTasks(): Task[] {
   const now = Date.now();
   return SAMPLE_TASKS.map(([title, description, dueOffset, status], i) => ({
     id: createId(),
@@ -77,10 +68,15 @@ function buildTasks(): Task[] {
     dueDate: dueOffset === null ? "" : isoInDays(dueOffset),
     status,
     createdAt: now - (SAMPLE_TASKS.length - i) * 1000,
+    source: "local",
+    syncStatus: "local_only",
+    startAt: dueOffset === null ? undefined : isoInDays(dueOffset),
+    endAt: dueOffset === null ? undefined : isoInDays(dueOffset),
+    allDay: dueOffset !== null,
   }));
 }
 
-function buildBookmarks(): Bookmark[] {
+export function buildBookmarks(): Bookmark[] {
   return SAMPLE_BOOKMARKS.map(([url, title, group], i) => ({
     id: createId(),
     url,
@@ -90,7 +86,7 @@ function buildBookmarks(): Bookmark[] {
   }));
 }
 
-function buildHabits(): Habit[] {
+export function buildHabits(): Habit[] {
   return [
     { id: createId(), name: "Uống đủ nước", done: [0, -1, -2, -3].map(isoInDays) },
     { id: createId(), name: "Đọc sách 20 phút", done: [-1, -2, -4].map(isoInDays) },
@@ -98,62 +94,28 @@ function buildHabits(): Habit[] {
   ];
 }
 
-/** Write a full demo dataset into storage (no reload). */
-export function writeSampleData() {
-  const store = window.localStorage;
-  store.setItem(DATA_KEYS.todos, JSON.stringify(buildTasks()));
-  store.setItem(DATA_KEYS.note, JSON.stringify(SAMPLE_NOTE));
-  store.setItem(DATA_KEYS.bookmarks, JSON.stringify(buildBookmarks()));
-  store.setItem(DATA_KEYS.groups, JSON.stringify(SAMPLE_GROUPS));
-  store.setItem(DATA_KEYS.habits, JSON.stringify(buildHabits()));
-}
-
-/** Seed a demo dataset only if the board has never held tasks. */
-export function seedSampleDataIfEmpty() {
-  if (window.localStorage.getItem(DATA_KEYS.todos) === null) {
-    writeSampleData();
-  }
-}
-
 /** Overwrite every tracker with a full demo dataset, then reload to render it. */
-export function createSampleData() {
-  writeSampleData();
+export async function createSampleData() {
+  await fetch("/api/sample-data", { method: "POST" });
   window.location.reload();
 }
 
 /** Clear all tracker data and reload, keeping personalization settings. */
-export function clearData() {
-  for (const key of Object.values(DATA_KEYS)) {
-    window.localStorage.removeItem(key);
-  }
+export async function clearData() {
+  await fetch("/api/sample-data", { method: "DELETE" });
   window.location.reload();
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function readTodos(): Task[] {
-  try {
-    const raw = window.localStorage.getItem(DATA_KEYS.todos);
-    return raw ? (JSON.parse(raw) as Task[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 /** How many done tasks were completed more than `days` ago (for the confirm). */
-export function countDoneOlderThan(days: number): number {
-  const cutoff = Date.now() - days * DAY_MS;
-  return readTodos().filter(
-    (t) => t.status === "done" && t.doneAt != null && t.doneAt < cutoff,
-  ).length;
+export async function countDoneOlderThan(days: number): Promise<number> {
+  const response = await fetch(`/api/todos?olderThanDays=${days}`);
+  if (!response.ok) return 0;
+  const body = (await response.json()) as { count?: number };
+  return body.count ?? 0;
 }
 
 /** Permanently delete done tasks completed more than `days` ago, then reload. */
-export function purgeDoneOlderThan(days: number) {
-  const cutoff = Date.now() - days * DAY_MS;
-  const kept = readTodos().filter(
-    (t) => !(t.status === "done" && t.doneAt != null && t.doneAt < cutoff),
-  );
-  window.localStorage.setItem(DATA_KEYS.todos, JSON.stringify(kept));
+export async function purgeDoneOlderThan(days: number) {
+  await fetch(`/api/todos?olderThanDays=${days}`, { method: "DELETE" });
   window.location.reload();
 }

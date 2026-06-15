@@ -1,6 +1,6 @@
-import { createId } from "../../lib/id";
 import { toIsoDate, todayIso } from "../../lib/date";
-import { useLocalStorage } from "../../lib/use-local-storage";
+import { apiJson } from "../../lib/api-client";
+import { useApiState } from "../../lib/use-api-state";
 
 export type Habit = {
   id: string;
@@ -11,16 +11,33 @@ export type Habit = {
 
 /** Habit store: add / remove / toggle today's completion. */
 export function useHabits() {
-  const [habits, setHabits] = useLocalStorage<Habit[]>("pt.habits", []);
+  const { data: habits, setData: setHabits, commit, reload } = useApiState<Habit[]>(
+    "/api/habits",
+    [],
+  );
 
   function addHabit(name: string) {
     const clean = name.trim();
     if (!clean) return;
-    setHabits((prev) => [...prev, { id: createId(), name: clean, done: [] }]);
+    void commit(
+      apiJson<Habit[]>("/api/habits", {
+        method: "POST",
+        body: JSON.stringify({ name: clean }),
+      }),
+      () => habits,
+    ).then((next) => {
+      if (next) setHabits(next);
+    });
   }
 
   function removeHabit(id: string) {
     setHabits((prev) => prev.filter((h) => h.id !== id));
+    void commit(apiJson<Habit[]>(`/api/habits/${id}`, { method: "DELETE" }), async () => {
+      await reload();
+      return habits;
+    }).then((next) => {
+      if (next) setHabits(next);
+    });
   }
 
   function toggleToday(id: string) {
@@ -37,6 +54,12 @@ export function useHabits() {
           : h,
       ),
     );
+    void commit(apiJson<Habit[]>(`/api/habits/${id}`, { method: "PATCH" }), async () => {
+      await reload();
+      return habits;
+    }).then((next) => {
+      if (next) setHabits(next);
+    });
   }
 
   return { habits, addHabit, removeHabit, toggleToday };

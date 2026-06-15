@@ -4,6 +4,8 @@ import { BentoCard } from "../../components/bento-card";
 import { useConfirm } from "../../components/confirm-dialog";
 import { IconButton } from "../../components/icon-button";
 import { Tooltip } from "../../components/ui/tooltip";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 import { cn } from "../../lib/cn";
 import { faviconUrl, hostname } from "../../lib/url";
 import { BookmarkDialog } from "./bookmark-dialog";
@@ -25,12 +27,14 @@ export function BookmarkCard({ className }: { className?: string }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [groupMgrOpen, setGroupMgrOpen] = useState(false);
   const confirm = useConfirm();
+  const locale = useLocale();
+  const t = messages[locale].features.bookmarks;
 
   async function handleRemoveGroup(name: string) {
     const ok = await confirm({
-      title: `Xoá nhóm "${name}"?`,
-      message: 'Bookmark trong nhóm sẽ chuyển về "Không nhóm".',
-      confirmLabel: "Xoá nhóm",
+      title: t.deleteGroupTitle(name),
+      message: t.deleteGroupMessage,
+      confirmLabel: t.deleteGroupConfirm,
       danger: true,
     });
     if (!ok) return;
@@ -45,7 +49,7 @@ export function BookmarkCard({ className }: { className?: string }) {
   return (
     <BentoCard
       icon={BookmarkIcon}
-      title="Bookmark"
+      title={t.title}
       scrollBody={false}
       className={className}
       action={
@@ -56,10 +60,11 @@ export function BookmarkCard({ className }: { className?: string }) {
             className="flex h-9 items-center gap-1.5 rounded-full bg-btn pl-3 pr-3.5 text-[13px] font-semibold text-btn-ink transition-colors hover:opacity-90"
           >
             <Plus size={16} />
-            Thêm bookmark
+            {t.addBookmark}
           </button>
           <IconButton
-            aria-label="Quản lý nhóm"
+            aria-label={t.manageGroups}
+            title={t.manageGroups}
             onClick={() => setGroupMgrOpen(true)}
           >
             <Settings2 size={18} />
@@ -71,7 +76,7 @@ export function BookmarkCard({ className }: { className?: string }) {
         {groups.length > 0 ? (
           <div className="mb-3 flex gap-1.5 overflow-x-auto">
             <FilterChip active={!filter} onClick={() => setFilter("")}>
-              Tất cả
+              {t.all}
             </FilterChip>
             {groups.map((g) => (
               <FilterChip
@@ -88,7 +93,7 @@ export function BookmarkCard({ className }: { className?: string }) {
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
           {visible.length === 0 ? (
             <p className="grid flex-1 place-items-center text-sm text-ink-faint">
-              Chưa có bookmark nào
+              {t.empty}
             </p>
           ) : (
             visible.map((b) => (
@@ -126,10 +131,10 @@ export function BookmarkCard({ className }: { className?: string }) {
                     </span>
                   ) : null}
                 </a>
-                <Tooltip label="Xóa bookmark">
+                <Tooltip label={t.deleteBookmark}>
                   <button
                     type="button"
-                    aria-label="Xóa bookmark"
+                    aria-label={t.deleteBookmark}
                     onClick={() => removeBookmark(b.id)}
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-faint opacity-0 transition hover:bg-surface-hover hover:text-ink group-hover:opacity-100"
                   >

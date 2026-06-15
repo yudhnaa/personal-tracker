@@ -6,6 +6,8 @@ import { fetchPageTitle } from "../../lib/fetch-title";
 import { normalizeUrl, tidyTitle } from "../../lib/url";
 import { GroupPicker } from "./group-picker";
 import type { BookmarkDraft } from "./use-bookmarks";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 type BookmarkDialogProps = {
   open: boolean;
@@ -26,6 +28,8 @@ export function BookmarkDialog({
   const [loadingTitle, setLoadingTitle] = useState(false);
   // Stop auto-fill once the user types their own title.
   const titleEdited = useRef(false);
+  const locale = useLocale();
+  const t = messages[locale].features.bookmarks.dialog;
 
   useEffect(() => {
     if (open) {
@@ -63,13 +67,13 @@ export function BookmarkDialog({
   }
 
   return (
-    <Modal open={open} title="Lưu bookmark" onClose={onClose}>
+    <Modal open={open} title={t.title} onClose={onClose}>
       <div className="space-y-4">
         <div>
-          <FieldLabel>Đường dẫn</FieldLabel>
+          <FieldLabel>{t.url}</FieldLabel>
           <TextField
             autoFocus
-            placeholder="vd: github.com hoặc https://..."
+            placeholder={t.urlPlaceholder}
             value={draft.url}
             onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
             onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -77,16 +81,16 @@ export function BookmarkDialog({
         </div>
         <div>
           <div className="flex items-center justify-between">
-            <FieldLabel>Tiêu đề</FieldLabel>
+            <FieldLabel>{t.titleLabel}</FieldLabel>
             {loadingTitle ? (
               <span className="mb-1.5 flex items-center gap-1 text-xs text-ink-faint">
                 <Loader2 size={12} className="animate-spin" />
-                Đang lấy tiêu đề
+                {t.fetchingTitle}
               </span>
             ) : null}
           </div>
           <TextField
-            placeholder="Tên hiển thị"
+            placeholder={t.titlePlaceholder}
             value={draft.title}
             onChange={(e) => {
               titleEdited.current = true;
@@ -95,7 +99,7 @@ export function BookmarkDialog({
           />
         </div>
         <div>
-          <FieldLabel>Nhóm</FieldLabel>
+          <FieldLabel>{t.group}</FieldLabel>
           <GroupPicker
             groups={groups}
             value={draft.group}
@@ -107,7 +111,7 @@ export function BookmarkDialog({
           onClick={submit}
           className="w-full rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
         >
-          Lưu lại
+          {t.save}
         </button>
       </div>
     </Modal>

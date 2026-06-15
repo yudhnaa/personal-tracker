@@ -3,6 +3,8 @@ import { useState } from "react";
 import { TextField } from "../../components/form-controls";
 import { IconButton } from "../../components/icon-button";
 import { Modal } from "../../components/modal";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 type GroupManagerDialogProps = {
   open: boolean;
@@ -25,6 +27,8 @@ export function GroupManagerDialog({
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const locale = useLocale();
+  const t = messages[locale].features.bookmarks.manager;
 
   function startEdit(name: string) {
     setEditing(name);
@@ -44,12 +48,12 @@ export function GroupManagerDialog({
   }
 
   return (
-    <Modal open={open} title="Quản lý nhóm" onClose={onClose}>
+    <Modal open={open} title={t.title} onClose={onClose}>
       <div className="space-y-4">
         <div className="space-y-1.5">
           {groups.length === 0 ? (
             <p className="py-2 text-center text-sm text-ink-faint">
-              Chưa có nhóm nào. Thêm nhóm đầu tiên bên dưới.
+              {t.empty}
             </p>
           ) : (
             groups.map((g) => (
@@ -70,14 +74,16 @@ export function GroupManagerDialog({
                       className="min-w-0 flex-1 bg-transparent text-sm font-medium text-ink outline-none"
                     />
                     <IconButton
-                      aria-label="Lưu tên"
+                      aria-label={t.saveName}
+                      title={t.saveName}
                       onClick={commitEdit}
                       className="h-7 w-7"
                     >
                       <Check size={15} />
                     </IconButton>
                     <IconButton
-                      aria-label="Huỷ"
+                      aria-label={t.cancel}
+                      title={t.cancel}
                       onClick={() => setEditing(null)}
                       className="h-7 w-7"
                     >
@@ -89,13 +95,14 @@ export function GroupManagerDialog({
                     <button
                       type="button"
                       onClick={() => startEdit(g)}
-                      title="Đổi tên nhóm"
+                      title={t.rename}
                       className="min-w-0 flex-1 truncate text-left text-sm font-medium text-ink"
                     >
                       {g}
                     </button>
                     <IconButton
-                      aria-label="Xoá nhóm"
+                      aria-label={t.deleteGroup}
+                      title={t.deleteGroup}
                       onClick={() => onRemove(g)}
                       className="h-7 w-7 text-ink-faint hover:text-red-600"
                     >
@@ -110,7 +117,7 @@ export function GroupManagerDialog({
 
         <div className="flex items-center gap-2 border-t border-line pt-4">
           <TextField
-            placeholder="Tên nhóm mới"
+            placeholder={t.newGroupPlaceholder}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addGroup()}
@@ -121,7 +128,7 @@ export function GroupManagerDialog({
             className="flex h-[42px] shrink-0 items-center gap-1.5 rounded-full bg-btn px-4 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
           >
             <Plus size={16} />
-            Thêm
+            {t.add}
           </button>
         </div>
       </div>

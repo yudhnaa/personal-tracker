@@ -1,11 +1,11 @@
 import { useMemo } from "react";
-import { createId } from "../../lib/id";
-import { useLocalStorage } from "../../lib/use-local-storage";
+import { apiJson } from "../../lib/api-client";
+import { useApiState } from "../../lib/use-api-state";
 import { TASK_STATUSES, type Task, type TaskStatus } from "./task-types";
 
 export type TaskDraft = Pick<
   Task,
-  "title" | "description" | "dueDate" | "status" | "checklist"
+  "title" | "description" | "dueDate" | "status" | "checklist" | "googleCalendarId" | "googleEventId" | "googleEventLink" | "startAt" | "endAt" | "allDay" | "location"
 >;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -32,14 +32,31 @@ function stampDone(tasks: Task[]): Task[] {
 
 /** Source of truth for tasks with grouping + CRUD + status moves. */
 export function useTodos() {
-  const [tasks, setRawTasks] = useLocalStorage<Task[]>("pt.todos", []);
+  const { data: tasks, setData: setRawTasks, commit, reload } = useApiState<Task[]>(
+    "/api/todos",
+    [],
+  );
 
   // Every write runs through stampDone so doneAt stays correct no matter which
   // path changed the status (dialog edit, status pill, or drag to the column).
-  const setTasks: typeof setRawTasks = (updater) =>
-    setRawTasks((prev) =>
-      stampDone(typeof updater === "function" ? updater(prev) : updater),
-    );
+  function setTasks(updater: Task[] | ((prev: Task[]) => Task[])) {
+    const apply = (prev: Task[]) =>
+      stampDone(typeof updater === "function" ? updater(prev) : updater);
+    setRawTasks((prev) => {
+      const next = apply(prev);
+      void commit(
+        apiJson<Task[]>("/api/todos", {
+          method: "PUT",
+          body: JSON.stringify(next),
+        }),
+        async () => {
+          await reload();
+          return prev;
+        },
+      );
+      return next;
+    });
+  }
 
   const byStatus = useMemo(() => {
     const groups = Object.fromEntries(
@@ -49,11 +66,16 @@ export function useTodos() {
     return groups;
   }, [tasks]);
 
-  function addTask(draft: TaskDraft) {
-    setTasks((prev) => [
-      { ...draft, id: createId(), createdAt: Date.now() },
-      ...prev,
-    ]);
+  async function addTask(draft: TaskDraft) {
+    const created = await commit(
+      apiJson<Task>("/api/todos", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      }),
+      () => tasks,
+    );
+    if (created) setRawTasks((prev) => stampDone([created, ...prev]));
+    return created ?? null;
   }
 
   function updateTask(id: string, draft: TaskDraft) {
@@ -79,7 +101,11 @@ export function useTodos() {
   }
 
   function removeTask(id: string) {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setRawTasks((prev) => prev.filter((t) => t.id !== id));
+    void commit(apiJson<Task[]>(`/api/todos/${id}`, { method: "DELETE" }), async () => {
+      await reload();
+      return tasks;
+    });
   }
 
   return {

@@ -1,0 +1,58 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: personal-tracker-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      # Add other environment variables from your .env file here
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - personal-tracker-network
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: personal-tracker-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: personal_tracker
+      POSTGRES_USER: ${POSTGRES_USER:-tracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracker}
+    volumes:
+      - postgres-data-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tracker} -d personal_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - personal-tracker-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: personal-tracker-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis-data-prod:/data
+    networks:
+      - personal-tracker-network
+
+volumes:
+  postgres-data-prod:
+  redis-data-prod:
+
+networks:
+  personal-tracker-network:
+    driver: bridge

@@ -31,6 +31,8 @@ import {
   type TaskStatus,
 } from "./task-types";
 import { isArchivedDone } from "./use-todos";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 type KanbanBoardProps = {
   byStatus: Record<TaskStatus, Task[]>;
@@ -208,6 +210,8 @@ function Column({
   // The column id doubles as a droppable so empty columns still accept drops.
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const [showArchived, setShowArchived] = useState(false);
+  const locale = useLocale();
+  const t = messages[locale].features.todo;
 
   // In Done, fold away tasks completed long ago so the board stays light.
   // They stay in storage and on the board model — just hidden until revealed.
@@ -233,7 +237,7 @@ function Column({
     >
       <div className="mb-2 flex items-center gap-2 px-1.5 pt-1">
         <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
-        <span className="text-xs font-semibold text-ink">{meta.label}</span>
+        <span className="text-xs font-semibold text-ink">{t.columns[status]}</span>
         <span className="ml-auto text-xs font-medium text-ink-faint">
           {ids.length - archivedIds.length}
         </span>
@@ -259,8 +263,8 @@ function Column({
           className="mt-1.5 shrink-0 rounded-[0.6rem] px-1.5 py-1 text-left text-[11px] font-medium text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink-soft"
         >
           {showArchived
-            ? "Ẩn bớt task cũ"
-            : `+ ${archivedIds.length} task cũ (đã xong > ${archiveDays} ngày)`}
+            ? t.archiveHide
+            : t.archiveShow(archivedIds.length, archiveDays)}
         </button>
       ) : null}
       <button
@@ -269,7 +273,7 @@ function Column({
         className="mt-1.5 flex w-full shrink-0 items-center gap-1.5 rounded-[0.85rem] px-2 py-2 text-left text-[13px] font-medium text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink-soft"
       >
         <Plus size={15} className="shrink-0" />
-        Thêm task
+        {t.addTask}
       </button>
     </div>
   );

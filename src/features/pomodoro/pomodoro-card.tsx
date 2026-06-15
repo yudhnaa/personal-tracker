@@ -3,12 +3,16 @@ import { BentoCard } from "../../components/bento-card";
 import { Tooltip } from "../../components/ui/tooltip";
 import { cn } from "../../lib/cn";
 import { usePomodoro } from "./use-pomodoro";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 /** Pomodoro timer with fixed 25/5 and 50/10 presets and a progress ring. */
 export function PomodoroCard({ className }: { className?: string }) {
   const p = usePomodoro();
   const mm = String(Math.floor(p.secondsLeft / 60)).padStart(2, "0");
   const ss = String(p.secondsLeft % 60).padStart(2, "0");
+  const locale = useLocale();
+  const t = messages[locale].features.pomodoro;
 
   const radius = 56;
   const circ = 2 * Math.PI * radius;
@@ -16,7 +20,7 @@ export function PomodoroCard({ className }: { className?: string }) {
   return (
     <BentoCard
       icon={Timer}
-      title="Pomodoro"
+      title={t.title}
       scrollBody={false}
       className={className}
       action={
@@ -25,7 +29,7 @@ export function PomodoroCard({ className }: { className?: string }) {
             <button
               key={preset.id}
               type="button"
-              title={`Tập trung ${preset.focus} phút · Nghỉ ${preset.break} phút`}
+              title={t.presetTooltip(preset.focus, preset.break)}
               onClick={() => p.selectPreset(preset)}
               className={cn(
                 "h-7 whitespace-nowrap rounded-full px-2.5 text-[11px] font-medium transition-colors",
@@ -73,7 +77,7 @@ export function PomodoroCard({ className }: { className?: string }) {
                 p.phase === "focus" ? "text-accent-ink" : "text-sky-600",
               )}
             >
-              {p.phase === "focus" ? "Tập trung" : "Nghỉ ngơi"}
+              {p.phase === "focus" ? t.stateFocus : t.stateBreak}
             </span>
             <span className="text-2xl font-semibold tabular-nums tracking-tight text-ink">
               {mm}:{ss}
@@ -88,22 +92,22 @@ export function PomodoroCard({ className }: { className?: string }) {
             className="flex h-10 items-center gap-2 rounded-full bg-btn pl-4 pr-5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
           >
             {p.running ? <Pause size={16} /> : <Play size={16} />}
-            {p.running ? "Tạm dừng" : "Bắt đầu"}
+            {p.running ? t.pause : t.start}
           </button>
-          <Tooltip label="Bỏ qua phiên">
+          <Tooltip label={t.skipTooltip}>
             <button
               type="button"
-              aria-label="Bỏ qua phiên"
+              aria-label={t.skipTooltip}
               onClick={p.switchPhase}
               className="grid h-10 w-10 place-items-center rounded-full bg-surface-muted text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
             >
               <SkipForward size={16} />
             </button>
           </Tooltip>
-          <Tooltip label="Đặt lại">
+          <Tooltip label={t.resetTooltip}>
             <button
               type="button"
-              aria-label="Đặt lại"
+              aria-label={t.resetTooltip}
               onClick={p.reset}
               className="grid h-10 w-10 place-items-center rounded-full bg-surface-muted text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
             >
@@ -113,10 +117,7 @@ export function PomodoroCard({ className }: { className?: string }) {
         </div>
 
         <p className="text-xs text-ink-faint">
-          Tập trung{" "}
-          <span className="font-semibold text-ink-soft">{p.preset.focus}'</span>{" "}
-          · Nghỉ{" "}
-          <span className="font-semibold text-ink-soft">{p.preset.break}'</span>
+          {t.footer(p.preset.focus, p.preset.break)}
         </p>
       </div>
     </BentoCard>

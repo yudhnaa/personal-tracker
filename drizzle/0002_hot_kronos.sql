@@ -1,0 +1,2 @@
+ALTER TABLE "habit_completions" DROP CONSTRAINT "habit_completions_habit_id_date_pk";--> statement-breakpoint
+ALTER TABLE "habit_completions" ADD CONSTRAINT "habit_completions_user_id_habit_id_date_pk" PRIMARY KEY("user_id","habit_id","date");

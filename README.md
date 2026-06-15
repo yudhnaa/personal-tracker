@@ -1,61 +1,81 @@
 # Personal Tracker
 
-Dashboard cá nhân theo phong cách **Minimalism Bento Grid**. Một màn hình duy nhất gom các công cụ hay dùng: Todo, Ghi chú, Bookmark, Pomodoro, Thói quen — toàn bộ dữ liệu lưu ở `localStorage`, không cần backend.
+Personal Tracker is a private Bento-grid dashboard for everyday planning. It combines Todo, Pomodoro, Notes, Bookmarks, Habits, and personal settings in a Next.js App Router application with BetterAuth sessions and PostgreSQL persistence.
 
-## Chạy dự án
+## Stack
+
+- Next.js App Router
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- BetterAuth email/password auth
+- PostgreSQL and Drizzle ORM
+- lucide-react icons
+- motion animations
+- dnd-kit for Todo drag and drop
+- date-fns and react-day-picker for date UI
+
+## Local Setup
 
 ```bash
 npm install
-npm run dev      # mở http://localhost:5173
-npm run build    # build production vào dist/
-npm run preview  # xem thử bản build
+cp .env.example .env.local
+docker compose up -d --wait postgres
+npm run db:migrate
+npm run dev
 ```
 
-Stack: **Vite + React 19 + TypeScript + Tailwind CSS v4 + lucide-react**. Font: Be Vietnam Pro.
+The app runs at `http://localhost:3000`. Docker exposes PostgreSQL on `127.0.0.1:5433` to avoid clashing with a local Postgres install on port `5432`.
 
-## Chức năng
+## Commands
 
-| Card | Mô tả |
-|------|-------|
-| **Todo** (2x2) | Hai view: **Board** (Kanban kéo-thả 4 cột Backlog / Todo / Doing / Done) và **Lịch** (task hiện theo Due Date). Task gồm Title, Description, Due Date, Status. |
-| **Pomodoro** | Hai preset **Cổ điển** (25/5) và **Chuyên sâu** (50/10), vòng tiến trình, tự chuyển focus ⇄ break. Hết giờ phát chuông (Web Audio) + thông báo hệ thống (Notification API). |
-| **Ghi chú** | Một vùng text thuần, tự lưu, đếm số từ. |
-| **Bookmark** | Dán link → **tự lấy tiêu đề** trang (qua proxy CORS, cắt gọn ở dấu phân cách) + favicon. Nhóm là thực thể riêng: chọn nhóm có sẵn hoặc tạo mới; không có nhóm thì không hiện list. Xóa được nhóm (bookmark trong đó về "Không nhóm"). |
-| **Thói quen** | Tick hoàn thành hôm nay, xem streak (chuỗi ngày liên tiếp) + lưới 7 ngày gần nhất. |
-
-## Header & Cài đặt (cá nhân hóa)
-
-Header toàn trang: bên trái là **tên board + ngày hôm nay**, bên phải có nút **Cài đặt**. Mỗi trình duyệt là một người dùng riêng (localStorage), tùy biến qua modal Cài đặt:
-
-- **Tên board** — hiện ở header.
-- **Giao diện** — Sáng / Tối (dark mode đầy đủ).
-- **Màu chủ đạo** — 6 màu, đổi toàn bộ accent tức thì.
-- **Ảnh nền** — 8 ảnh sẵn (lá thu, lá xanh, khinh khí cầu, bờ băng...) + Trơn.
-- **Xoá data / Tạo data mẫu** — Xoá data giữ lại cài đặt giao diện; tạo data mẫu ghi đè toàn bộ task/note/bookmark.
-
-Theme dùng CSS variable semantic (`--color-surface`, `--color-ink`, `--color-accent`...) flip theo class `.dark`; màu primary chỉ đổi `--color-accent`, các sắc độ phụ tự suy ra bằng `color-mix`. Settings áp trước khi paint (trong `main.tsx`) để không nháy theme khi load.
-
-## Thiết kế
-
-- Nền ảnh `public/bg.jpg` → container mờ (full width, có padding) → các card trắng bo góc lớn.
-- Quy tắc bo góc: container `2.5rem` bao card `1.75rem` bao phần tử trong `1rem`.
-- Spacing giữa card nhỏ và đồng bộ; không shadow, không emoji.
-- Mỗi card dùng chung khung `BentoCard`: header cao cố định (icon + title, action bên phải) + body.
-- **Mọi phần tử click được đều có `cursor: pointer`** — rule global trong `src/index.css`; phần tử click không phải `<button>/<a>` (vd span có onClick) thêm class `cursor-pointer` thủ công.
-
-## Cấu trúc
-
+```bash
+npm run dev        # Next.js dev server
+npm run typecheck  # TypeScript check
+npm run build      # typecheck + production build
+npm run preview    # Next.js production server
+npm run db:generate
+npm run db:migrate
+npm run db:studio
 ```
+
+## Product Surface
+
+- `/`: responsive marketing landing page with English/Vietnamese locale support.
+- `/login`, `/register`: BetterAuth email/password auth flows.
+- `/forgot-password`, `/reset-password`: dev-only reset-link delivery and reset flow.
+- `/account`: profile email, logout, and change-password flow.
+- `/dashboard`: authenticated Bento dashboard.
+
+Dashboard data is private per user and stored in PostgreSQL. Existing browser `localStorage` data from the old Vite app is treated as legacy data and is not imported automatically.
+
+## Dashboard Features
+
+| Card | Behavior |
+|------|----------|
+| Todo | Kanban and calendar views with task CRUD, due dates, statuses, done timestamps, checklist items, and drag-sort persistence. |
+| Pomodoro | Focus/break presets, progress ring, browser notifications, and chime support. |
+| Notes | Freeform note text with API-backed persistence. |
+| Bookmarks | Bookmarks and first-class bookmark groups with rename/delete detach behavior. |
+| Habits | Habit creation/removal, today's completion toggle, streak, and recent-day tracking. |
+| Settings | Board title, theme, accent, background, archive threshold, sample data, purge, and data clearing. |
+
+## Repository Map
+
+```text
+app/                         # Next.js routes and route handlers
+drizzle/                     # generated SQL migrations
 src/
-├── app.tsx                      # Bố cục Bento Grid 3x3 + header + settings
-├── components/                  # BentoCard, Modal, header, settings-modal, form controls
-├── lib/                         # localStorage, settings, date, url, notify, id, cn
-└── features/
-    ├── todo/                    # board, calendar, dialog, hook, types
-    ├── notes/
-    ├── bookmarks/
-    ├── pomodoro/
-    └── habits/
+├── app.tsx                  # client dashboard shell
+├── components/              # shared UI, auth screens, landing page
+├── db/                      # Drizzle connection and schema
+├── features/                # dashboard feature cards and hooks
+└── lib/                     # auth, API helpers, i18n, settings, utilities
 ```
 
-Mỗi file giữ < 200 dòng, đặt tên kebab-case mô tả rõ mục đích.
+## Development Notes
+
+- Dashboard REST handlers reject unauthenticated requests and scope reads/writes by BetterAuth user ID.
+- `localStorage` remains only for small non-sensitive UI preferences such as the Todo view toggle.
+- Dev password reset links are logged and exposed at `/api/dev/password-reset-links`; SMTP is intentionally out of scope for this phase.
+- See `DESIGN.md` for the current dashboard visual system.

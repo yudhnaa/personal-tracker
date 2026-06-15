@@ -2,6 +2,8 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { TextField } from "../../components/form-controls";
 import { cn } from "../../lib/cn";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 type GroupPickerProps = {
   groups: string[];
@@ -17,11 +19,13 @@ export function GroupPicker({ groups, value, onChange }: GroupPickerProps) {
   // A typed value that isn't an existing group counts as "creating new".
   const isNew = value !== "" && !groups.includes(value);
   const [creating, setCreating] = useState(isNew);
+  const locale = useLocale();
+  const t = messages[locale].features.bookmarks.picker;
 
   if (groups.length === 0) {
     return (
       <TextField
-        placeholder="Tạo nhóm mới (không bắt buộc)"
+        placeholder={t.createPlaceholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -38,7 +42,7 @@ export function GroupPicker({ groups, value, onChange }: GroupPickerProps) {
             onChange("");
           }}
         >
-          Không nhóm
+          {t.uncategorized}
         </Chip>
         {groups.map((g) => (
           <Chip
@@ -60,13 +64,13 @@ export function GroupPicker({ groups, value, onChange }: GroupPickerProps) {
           }}
         >
           <Plus size={13} />
-          Nhóm mới
+          {t.newGroup}
         </Chip>
       </div>
       {creating ? (
         <TextField
           autoFocus
-          placeholder="Tên nhóm mới"
+          placeholder={t.newGroupPlaceholder}
           value={isNew ? value : ""}
           onChange={(e) => onChange(e.target.value)}
         />

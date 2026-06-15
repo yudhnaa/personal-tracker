@@ -6,6 +6,9 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 /** A single "việc cần làm" line inside a task. */
 export type ChecklistItem = { id: string; text: string; done: boolean };
 
+export type TaskSource = "local" | "google";
+export type TaskSyncStatus = "local_only" | "synced" | "pending_sync" | "error";
+
 export type Task = {
   id: string;
   title: string;
@@ -18,6 +21,16 @@ export type Task = {
   doneAt?: number;
   /** Optional checklist of subtasks. */
   checklist?: ChecklistItem[];
+  source: TaskSource;
+  syncStatus: TaskSyncStatus;
+  startAt?: string;
+  endAt?: string;
+  allDay?: boolean;
+  location?: string;
+  googleCalendarId?: string;
+  googleEventId?: string;
+  googleEventLink?: string;
+  googleEventPayload?: Record<string, any>;
 };
 
 export const STATUS_META: Record<

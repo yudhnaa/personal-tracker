@@ -4,6 +4,8 @@ import { Tooltip } from "../../components/ui/tooltip";
 import { cn } from "../../lib/cn";
 import { createId } from "../../lib/id";
 import type { ChecklistItem } from "./task-types";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 type TaskChecklistProps = {
   items: ChecklistItem[];
@@ -19,6 +21,8 @@ export function TaskChecklist({ items, onChange }: TaskChecklistProps) {
   const [draft, setDraft] = useState("");
   const done = items.filter((i) => i.done).length;
   const total = items.length;
+  const locale = useLocale();
+  const t = messages[locale].features.todo;
 
   function add() {
     const text = draft.trim();
@@ -37,7 +41,7 @@ export function TaskChecklist({ items, onChange }: TaskChecklistProps) {
     <div className="flex flex-col">
       <div className="mb-2 flex shrink-0 items-center gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-          Việc cần làm
+          {t.checklist.title}
         </p>
         {total > 0 ? (
           <span className="text-xs font-semibold tabular-nums text-ink-soft">
@@ -61,11 +65,11 @@ export function TaskChecklist({ items, onChange }: TaskChecklistProps) {
             key={item.id}
             className="group flex items-center gap-2 rounded-[0.6rem] px-1.5 py-1 transition-colors hover:bg-surface-sunken"
           >
-            <Tooltip label={item.done ? "Bỏ đánh dấu" : "Đánh dấu xong"}>
+            <Tooltip label={item.done ? t.checklist.unmark : t.checklist.mark}>
               <button
                 type="button"
                 onClick={() => toggle(item.id)}
-                aria-label={item.done ? "Bỏ đánh dấu" : "Đánh dấu xong"}
+                aria-label={item.done ? t.checklist.unmark : t.checklist.mark}
                 className={cn(
                   "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors",
                   item.done
@@ -84,11 +88,11 @@ export function TaskChecklist({ items, onChange }: TaskChecklistProps) {
                 item.done && "text-ink-faint line-through",
               )}
             />
-            <Tooltip label="Xoá việc">
+            <Tooltip label={t.checklist.delete}>
               <button
                 type="button"
                 onClick={() => remove(item.id)}
-                aria-label="Xoá việc"
+                aria-label={t.checklist.delete}
                 className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-ink-faint opacity-0 transition hover:bg-surface-hover hover:text-ink group-hover:opacity-100"
               >
                 <X size={14} />
@@ -108,13 +112,13 @@ export function TaskChecklist({ items, onChange }: TaskChecklistProps) {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Thêm việc cần làm..."
+          placeholder={t.checklist.placeholder}
           className="min-w-0 flex-1 rounded-[0.7rem] bg-surface-sunken px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:ring-2 focus:ring-accent/40"
         />
-        <Tooltip label="Thêm việc">
+        <Tooltip label={t.checklist.add}>
           <button
             type="submit"
-            aria-label="Thêm việc"
+            aria-label={t.checklist.add}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-btn text-btn-ink transition-colors hover:opacity-90"
           >
             <Plus size={16} />

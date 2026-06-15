@@ -5,11 +5,15 @@ import { Tooltip } from "../../components/ui/tooltip";
 import { cn } from "../../lib/cn";
 import { todayIso } from "../../lib/date";
 import { currentStreak, last7Days, useHabits, type Habit } from "./use-habits";
+import { messages } from "../../lib/i18n";
+import { useLocale } from "../../components/locale-provider";
 
 /** Daily habit tracker: check off today, see streak + last-7-days grid. */
 export function HabitCard({ className }: { className?: string }) {
   const { habits, addHabit, removeHabit, toggleToday } = useHabits();
   const [draft, setDraft] = useState("");
+  const locale = useLocale();
+  const t = messages[locale].features.habits;
 
   function submit() {
     addHabit(draft);
@@ -19,17 +23,15 @@ export function HabitCard({ className }: { className?: string }) {
   return (
     <BentoCard
       icon={Repeat}
-      title="Thói quen"
+      title={t.title}
       scrollBody={false}
       className={className}
     >
       <div className="flex h-full flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-0.5">
           {habits.length === 0 ? (
-            <p className="grid flex-1 place-items-center text-center text-sm text-ink-faint">
-              Chưa có thói quen nào.
-              <br />
-              Thêm một cái bên dưới để bắt đầu.
+            <p className="grid flex-1 place-items-center text-center text-sm text-ink-faint whitespace-pre-line">
+              {t.empty}
             </p>
           ) : (
             habits.map((h) => (
@@ -53,13 +55,13 @@ export function HabitCard({ className }: { className?: string }) {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Thêm thói quen mới..."
+            placeholder={t.placeholder}
             className="min-w-0 flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
           />
-          <Tooltip label="Thêm thói quen">
+          <Tooltip label={t.addTooltip}>
             <button
               type="submit"
-              aria-label="Thêm thói quen"
+              aria-label={t.addTooltip}
               className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full bg-btn text-btn-ink transition-colors hover:opacity-90"
             >
               <Plus size={18} />
@@ -82,14 +84,16 @@ function HabitRow({
 }) {
   const doneToday = habit.done.includes(todayIso());
   const streak = currentStreak(habit.done);
+  const locale = useLocale();
+  const t = messages[locale].features.habits;
 
   return (
     <div className="group relative flex items-center gap-3 rounded-[var(--radius-inner)] bg-surface-sunken px-3 py-2">
-      <Tooltip label={doneToday ? "Bỏ đánh dấu hôm nay" : "Đánh dấu hôm nay"}>
+      <Tooltip label={doneToday ? t.unmarkTooltip : t.markTooltip}>
         <button
           type="button"
           onClick={onToggle}
-          aria-label={doneToday ? "Bỏ đánh dấu hôm nay" : "Đánh dấu hôm nay"}
+          aria-label={doneToday ? t.unmarkTooltip : t.markTooltip}
           className={cn(
             "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors",
             doneToday
@@ -131,11 +135,11 @@ function HabitRow({
       </span>
 
       {/* Sits over the streak slot on hover — no reserved space, no layout shift. */}
-      <Tooltip label="Xoá thói quen">
+      <Tooltip label={t.deleteTooltip}>
         <button
           type="button"
           onClick={onRemove}
-          aria-label="Xoá thói quen"
+          aria-label={t.deleteTooltip}
           className="absolute right-2.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full bg-surface-muted text-ink-faint opacity-0 transition hover:bg-surface-hover hover:text-ink group-hover:opacity-100"
         >
           <X size={14} />

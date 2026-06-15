@@ -1,4 +1,6 @@
 node_modules
+node_modules.root-owned-backup
+.next
 dist
 *.local
 .DS_Store
@@ -9,3 +11,7 @@ dist
 # Logs
 *.log
 npm-debug.log*
+.gitnexus
+
+# Environment variables
+.env
