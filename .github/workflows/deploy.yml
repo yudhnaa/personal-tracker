@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -37,8 +38,8 @@ jobs:
     name: Build & Push Docker Image
     needs: lint-and-typecheck
     runs-on: ubuntu-latest
-    # Only push image if changes are merged to main
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Only push image if changes are merged to main, or manually triggered
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     permissions:
       contents: read
       packages: write
@@ -75,7 +76,7 @@ jobs:
     name: Deploy to Production
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
 
     steps:
       - name: Execute SSH commands on VPS

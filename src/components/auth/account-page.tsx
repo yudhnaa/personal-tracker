@@ -6,6 +6,7 @@ import { AuthShell } from "./auth-shell";
 import { messages, type Locale } from "@/lib/i18n";
 import { GoogleCalendarSettingsPanel } from "@/features/google-calendar/google-calendar-settings-panel";
 import { useGoogleCalendar } from "@/features/google-calendar/use-google-calendar";
+import { authClient } from "@/lib/auth-client";
 
 export function AccountPage({
 	email,
@@ -32,7 +33,7 @@ export function AccountPage({
 	}
 
 	async function logout() {
-		await fetch("/api/auth/sign-out", { method: "POST" });
+		await authClient.signOut();
 		localStorage.removeItem("pt_query_cache");
 		router.push("/login");
 		router.refresh();
