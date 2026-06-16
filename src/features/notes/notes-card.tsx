@@ -1,5 +1,5 @@
 import { NotebookPen } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BentoCard } from "../../components/bento-card";
 import { apiJson } from "../../lib/api-client";
 import { useApiState } from "../../lib/use-api-state";
@@ -10,27 +10,30 @@ import { useLocale } from "../../components/locale-provider";
 export function NotesCard({ className }: { className?: string }) {
   // Free text changes on every keystroke — debounce the write so a large note
   // doesn't re-serialize the whole string each key press.
-  const { data: text, setData: setText, loading, commit, reload } = useApiState<string>("/api/notes", "");
+  const { data: serverText, loading, commit, reload } = useApiState<string>("/api/notes", "");
+  const [draft, setDraft] = useState<string | null>(null);
+  
+  const text = draft !== null ? draft : serverText;
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   const locale = useLocale();
   const t = messages[locale].features.notes;
 
   useEffect(() => {
-    if (loading) return;
+    if (draft === null) return;
     const timeout = window.setTimeout(() => {
       void commit(
         apiJson<string>("/api/notes", {
           method: "PATCH",
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text: draft }),
         }),
         async () => {
           await reload();
-          return text;
+          return draft;
         },
       );
     }, 400);
     return () => window.clearTimeout(timeout);
-  }, [commit, loading, reload, text]);
+  }, [commit, reload, draft]);
 
   return (
     <BentoCard
@@ -48,7 +51,7 @@ export function NotesCard({ className }: { className?: string }) {
         id="notes-content"
         name="notes-content"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => setDraft(e.target.value)}
         placeholder={t.placeholder}
         className="h-full w-full resize-none rounded-[var(--radius-inner)] bg-surface-sunken p-3.5 text-sm leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-surface-sunken focus:ring-2 focus:ring-accent/30"
       />

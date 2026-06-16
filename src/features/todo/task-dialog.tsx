@@ -67,7 +67,7 @@ export function TaskDialog({
     const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
     
     setDraft(
-      task
+      task && task.id
         ? {
             type: defaultType,
             title: task.title,
@@ -87,7 +87,8 @@ export function TaskDialog({
             googleCalendarId: "",
             startAt: now.toISOString(),
             endAt: oneHourLater.toISOString(),
-            dueDate: format(now, "yyyy-MM-dd"),
+            dueDate: task?.dueDate || format(now, "yyyy-MM-dd"),
+            status: task?.status || "todo",
           },
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
