@@ -1,49 +1,52 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "./api-client";
 
-export function useApiState<T>(url: string, fallback: T) {
-  const [data, setData] = useState<T>(fallback);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const mounted = useRef(true);
+export function useApiState<T>(url: string, fallback: T, queryKey?: string[]) {
+  const queryClient = useQueryClient();
+  const key = queryKey || [url];
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await apiJson<T>(url);
-      if (mounted.current) setData(next);
-    } catch (err) {
-      if (mounted.current) setError(err instanceof Error ? err.message : "Request failed");
-    } finally {
-      if (mounted.current) setLoading(false);
-    }
-  }, [url]);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: key,
+    queryFn: async () => {
+      return apiJson<T>(url);
+    },
+  });
 
-  useEffect(() => {
-    mounted.current = true;
-    void reload();
-    return () => {
-      mounted.current = false;
-    };
-  }, [reload]);
+  const setData = useCallback(
+    (updater: T | ((prev: T) => T)) => {
+      queryClient.setQueryData<T>(key, (old) => {
+        const current = old === undefined ? fallback : old;
+        return typeof updater === "function" ? (updater as any)(current) : updater;
+      });
+    },
+    [queryClient, key, fallback]
+  );
 
   const commit = useCallback(
     async <R,>(request: Promise<R>, recover: () => T | Promise<T>) => {
       try {
-        return await request;
+        const result = await request;
+        // Invalidate to sync server state after successful mutation
+        void queryClient.invalidateQueries({ queryKey: key });
+        return result;
       } catch (err) {
-        if (mounted.current) {
-          setError(err instanceof Error ? err.message : "Request failed");
-          setData(await recover());
-        }
+        const recoveredData = await recover();
+        queryClient.setQueryData<T>(key, recoveredData);
         return undefined;
       }
     },
-    [],
+    [queryClient, key]
   );
 
-  return { data, setData, loading, error, reload, commit };
+  return {
+    data: data === undefined ? fallback : data,
+    setData,
+    loading: isLoading,
+    error: error instanceof Error ? error.message : error ? String(error) : null,
+    reload: refetch,
+    commit,
+  };
 }

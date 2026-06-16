@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "@/lib/api-client";
 import { useApiState } from "@/lib/use-api-state";
 import type {
@@ -24,6 +25,7 @@ const DEFAULT_CONNECTION: GoogleCalendarConnectionStatus = {
 export type UseGoogleCalendarResult = ReturnType<typeof useGoogleCalendar>;
 
 export function useGoogleCalendar() {
+  const queryClient = useQueryClient();
   const {
     data: connection,
     setData: setConnection,
@@ -34,12 +36,20 @@ export function useGoogleCalendar() {
     "/api/google-calendar/connection",
     DEFAULT_CONNECTION,
   );
-  const [calendars, setCalendars] = useState<GoogleCalendarListItem[]>([]);
-  const [events, setEvents] = useState<GoogleCalendarEvent[]>([]);
+  
   const [range, setRange] = useState<EventRange | null>(null);
-  const [calendarsLoading, setCalendarsLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("googleCalendar") === "connected") {
+        void queryClient.invalidateQueries({ queryKey: ["/api/google-calendar/connection"] });
+        url.searchParams.delete("googleCalendar");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, [queryClient]);
 
   const markReconnectRequired = useCallback((message: string) => {
     setConnection((current) => ({
@@ -47,10 +57,10 @@ export function useGoogleCalendar() {
       connected: false,
       reconnectRequired: true,
     }));
-    setCalendars([]);
-    setEvents([]);
     setError(message);
-  }, [setConnection]);
+    queryClient.setQueryData(["/api/google-calendar/calendars"], []);
+    queryClient.setQueryData(["/api/google-calendar/events", range ? new URLSearchParams(range).toString() : ""], []);
+  }, [setConnection, queryClient, range]);
 
   const handleError = useCallback((err: unknown) => {
     const message = extractErrorMessage(err);
@@ -61,68 +71,46 @@ export function useGoogleCalendar() {
     }
   }, [markReconnectRequired]);
 
-  const loadCalendars = useCallback(async () => {
-    if (!connection.connected || connection.reconnectRequired) return [];
-    setCalendarsLoading(true);
-    setError(null);
-    try {
-      const next = await apiJson<GoogleCalendarListItem[]>("/api/google-calendar/calendars");
-      setCalendars(next);
-      return next;
-    } catch (err) {
-      handleError(err);
-      return [];
-    } finally {
-      setCalendarsLoading(false);
-    }
-  }, [connection.connected, connection.reconnectRequired, handleError]);
+  const { data: calendarsData, isLoading: calendarsLoading, refetch: loadCalendars } = useQuery({
+    queryKey: ["/api/google-calendar/calendars"],
+    queryFn: async () => {
+      try {
+        return await apiJson<GoogleCalendarListItem[]>("/api/google-calendar/calendars");
+      } catch (err) {
+        handleError(err);
+        return [];
+      }
+    },
+    enabled: connection.connected && !connection.reconnectRequired,
+  });
+  const calendars = calendarsData || [];
 
-  const syncEvents = useCallback(async (nextRange = range) => {
-    if (!connection.connected || connection.reconnectRequired || !nextRange) return [];
-    setSyncing(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams(nextRange);
-      const next = await apiJson<GoogleCalendarEvent[]>(`/api/google-calendar/events?${params.toString()}`);
-      setEvents(next);
-      return next;
-    } catch (err) {
-      handleError(err);
-      return [];
-    } finally {
-      setSyncing(false);
-    }
-  }, [connection.connected, connection.reconnectRequired, handleError, range]);
+  const paramsString = range ? new URLSearchParams(range).toString() : "";
+  const eventsQueryKey = ["/api/google-calendar/events", paramsString];
 
-  useEffect(() => {
-    if (connection.connected && !connection.reconnectRequired) {
-      void loadCalendars();
-    } else {
-      setCalendars([]);
-      setEvents([]);
-    }
-  }, [connection.connected, connection.reconnectRequired, loadCalendars]);
-
-  useEffect(() => {
-    if (!range || !connection.connected || connection.reconnectRequired) return;
-    void syncEvents(range);
-  }, [connection.connected, connection.reconnectRequired, range, syncEvents]);
+  const { data: eventsData, isFetching: syncing, refetch: syncNow } = useQuery({
+    queryKey: eventsQueryKey,
+    queryFn: async () => {
+      try {
+        return await apiJson<GoogleCalendarEvent[]>(`/api/google-calendar/events?${paramsString}`);
+      } catch (err) {
+        handleError(err);
+        return [];
+      }
+    },
+    enabled: !!range && connection.connected && !connection.reconnectRequired,
+  });
+  const events = eventsData || [];
 
   useEffect(() => {
     if (!range || !connection.connected || connection.reconnectRequired) return;
     const intervalMs = Math.max(connection.syncIntervalMinutes || 5, 1) * 60 * 1000;
     const interval = window.setInterval(() => {
       if (document.hidden) return;
-      void syncEvents(range);
+      void syncNow();
     }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [
-    connection.connected,
-    connection.reconnectRequired,
-    connection.syncIntervalMinutes,
-    range,
-    syncEvents,
-  ]);
+  }, [connection.connected, connection.reconnectRequired, connection.syncIntervalMinutes, range, syncNow]);
 
   function connect() {
     window.location.assign("/api/google-calendar/connect");
@@ -134,8 +122,8 @@ export function useGoogleCalendar() {
       method: "DELETE",
     });
     setConnection(next);
-    setCalendars([]);
-    setEvents([]);
+    queryClient.setQueryData(["/api/google-calendar/calendars"], []);
+    queryClient.setQueryData(eventsQueryKey, []);
   }
 
   async function toggleCalendar(calendarId: string) {
@@ -143,18 +131,18 @@ export function useGoogleCalendar() {
     const next = calendars.map((calendar) =>
       calendar.id === calendarId ? { ...calendar, selected: !calendar.selected } : calendar,
     );
-    setCalendars(next);
+    queryClient.setQueryData(["/api/google-calendar/calendars"], next);
     const selectedCalendarIds = next.filter((calendar) => calendar.selected).map((calendar) => calendar.id);
     try {
       const updated = await apiJson<GoogleCalendarListItem[]>("/api/google-calendar/calendars", {
         method: "PATCH",
         body: JSON.stringify({ selectedCalendarIds }),
       });
-      setCalendars(updated);
+      queryClient.setQueryData(["/api/google-calendar/calendars"], updated);
       setConnection((current) => ({ ...current, selectedCalendarIds }));
-      if (range) void syncEvents(range);
+      if (range) void syncNow();
     } catch (err) {
-      setCalendars(previous);
+      queryClient.setQueryData(["/api/google-calendar/calendars"], previous);
       handleError(err);
     }
   }
@@ -166,7 +154,7 @@ export function useGoogleCalendar() {
         method: "POST",
         body: JSON.stringify(draft),
       });
-      setEvents((current) => upsertEvent(current, created));
+      queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, (current = []) => upsertEvent(current, created));
       return created;
     } catch (err) {
       handleError(err);
@@ -177,7 +165,7 @@ export function useGoogleCalendar() {
   async function updateEvent(event: GoogleCalendarEvent, patch: GoogleCalendarEventPatch) {
     const previous = events;
     const optimistic = { ...event, ...patch };
-    setEvents((current) => upsertEvent(current, optimistic));
+    queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, (current = []) => upsertEvent(current, optimistic));
     try {
       const updated = await apiJson<GoogleCalendarEvent>(
         `/api/google-calendar/events/${encodeURIComponent(event.id)}?calendarId=${encodeURIComponent(event.calendarId)}`,
@@ -186,10 +174,10 @@ export function useGoogleCalendar() {
           body: JSON.stringify(patch),
         },
       );
-      setEvents((current) => upsertEvent(current, updated));
+      queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, (current = []) => upsertEvent(current, updated));
       return updated;
     } catch (err) {
-      setEvents(previous);
+      queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, previous);
       handleError(err);
       return null;
     }
@@ -197,14 +185,16 @@ export function useGoogleCalendar() {
 
   async function deleteEvent(event: GoogleCalendarEvent) {
     const previous = events;
-    setEvents((current) => current.filter((item) => item.id !== event.id || item.calendarId !== event.calendarId));
+    queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, (current = []) => 
+      current.filter((item) => item.id !== event.id || item.calendarId !== event.calendarId)
+    );
     try {
       await apiJson<{ ok: true }>(
         `/api/google-calendar/events/${encodeURIComponent(event.id)}?calendarId=${encodeURIComponent(event.calendarId)}`,
         { method: "DELETE" },
       );
     } catch (err) {
-      setEvents(previous);
+      queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, previous);
       handleError(err);
     }
   }
@@ -224,7 +214,7 @@ export function useGoogleCalendar() {
     loadCalendars,
     toggleCalendar,
     setVisibleRange: setRange,
-    syncNow: syncEvents,
+    syncNow,
     createEvent,
     updateEvent,
     deleteEvent,

@@ -10,21 +10,27 @@ import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 import type { GoogleCalendarListItem } from "../google-calendar/types";
 
-export type TaskDialogDraft = TaskDraft & {
+export type ItemType = "task" | "event";
+
+export type ItemDialogDraft = TaskDraft & {
+  type: ItemType;
   googleCalendarId?: string;
 };
 
-type TaskDialogProps = {
+type ItemDialogProps = {
   open: boolean;
   /** Prefilled fields (status from a column, due date from the calendar). */
   task: Task | null;
+  /** Initial type if we are strictly opening a task or an event by default */
+  defaultType?: ItemType;
   googleCalendarConnected?: boolean;
   googleCalendars?: GoogleCalendarListItem[];
   onClose: () => void;
-  onSubmit: (draft: TaskDialogDraft) => void | Promise<void>;
+  onSubmit: (draft: ItemDialogDraft) => void | Promise<void>;
 };
 
-const EMPTY: TaskDialogDraft = {
+const EMPTY: ItemDialogDraft = {
+  type: "task",
   title: "",
   description: "",
   dueDate: "",
@@ -37,20 +43,16 @@ const EMPTY: TaskDialogDraft = {
   location: "",
 };
 
-/**
- * Create dialog — same layout as the detail "card back" (status pills, title,
- * due date, description, checklist) but fields are plain inputs gathered into a
- * draft and committed with one button, so the create/edit experience matches.
- */
 export function TaskDialog({
   open,
   task,
+  defaultType = "task",
   googleCalendarConnected = false,
   googleCalendars = [],
   onClose,
   onSubmit,
-}: TaskDialogProps) {
-  const [draft, setDraft] = useState<TaskDialogDraft>(EMPTY);
+}: ItemDialogProps) {
+  const [draft, setDraft] = useState<ItemDialogDraft>(EMPTY);
   const locale = useLocale();
   const t = messages[locale].features.todo;
   const enabledGoogleCalendars = useMemo(
@@ -64,6 +66,7 @@ export function TaskDialog({
     setDraft(
       task
         ? {
+            type: defaultType,
             title: task.title,
             description: task.description,
             dueDate: task.dueDate,
@@ -75,22 +78,52 @@ export function TaskDialog({
             allDay: task.allDay ?? false,
             location: task.location ?? "",
           }
-        : { ...EMPTY, googleCalendarId: "" },
+        : { ...EMPTY, type: defaultType, googleCalendarId: "" },
     );
-  }, [enabledGoogleCalendars, open, task]);
+  }, [enabledGoogleCalendars, open, task, defaultType]);
 
   function submit() {
     if (!draft.title.trim()) return;
+    if (draft.type === "event" && !draft.googleCalendarId) return; // Events require a calendar
     void onSubmit({
       ...draft,
       title: draft.title.trim(),
-      googleCalendarId: (draft.startAt || draft.dueDate) ? draft.googleCalendarId : undefined,
+      googleCalendarId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarId : undefined,
     });
     onClose();
   }
 
+  const isEvent = draft.type === "event";
+
+  const typeToggle = (
+    <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1">
+      <button
+        type="button"
+        onClick={() => setDraft((d) => ({ ...d, type: "task" }))}
+        className={cn(
+          "flex-1 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
+          !isEvent ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
+        )}
+      >
+        Task
+      </button>
+      {googleCalendarConnected && (
+        <button
+          type="button"
+          onClick={() => setDraft((d) => ({ ...d, type: "event", googleCalendarId: d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" }))}
+          className={cn(
+            "flex-1 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
+            isEvent ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
+          )}
+        >
+          Event
+        </button>
+      )}
+    </div>
+  );
+
   const statusPills = (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5 mt-4">
       {TASK_STATUSES.map((s) => {
         const active = draft.status === s;
         return (
@@ -119,8 +152,10 @@ export function TaskDialog({
   );
 
   return (
-    <Modal open={open} wide title={statusPills} onClose={onClose}>
+    <Modal open={open} title={typeToggle} onClose={onClose}>
       <div className="space-y-5">
+        {!isEvent && statusPills}
+
         {/* Title. */}
         <div>
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-faint">
@@ -213,7 +248,7 @@ export function TaskDialog({
           </div>
         </div>
 
-        {googleCalendarConnected && (draft.dueDate || draft.startAt) ? (
+        {googleCalendarConnected && (draft.dueDate || draft.startAt || isEvent) ? (
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-faint">
               {t.dialog.syncCalendarLabel}
@@ -224,7 +259,7 @@ export function TaskDialog({
                 onChange={(e) => setDraft((d) => ({ ...d, googleCalendarId: e.target.value }))}
                 className="w-full rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
               >
-                <option value="">{t.dialog.localOnlyOption}</option>
+                {!isEvent && <option value="">{t.dialog.localOnlyOption}</option>}
                 {enabledGoogleCalendars.map((calendar) => (
                   <option key={calendar.id} value={calendar.id}>
                     {calendar.summary}
@@ -269,36 +304,20 @@ export function TaskDialog({
         </div>
 
         {/* Checklist. */}
-        <div>
-          <TaskChecklist
-            items={draft.checklist ?? []}
-            onChange={(checklist) => setDraft((d) => ({ ...d, checklist }))}
-          />
-        </div>
-
-        {/* Advanced / Meta */}
-        <details className="group rounded-[var(--radius-inner)] border border-surface-muted [&_summary::-webkit-details-marker]:hidden">
-          <summary className="cursor-pointer px-3.5 py-2.5 text-sm font-medium text-ink-faint outline-none transition-colors hover:text-ink">
-            {t.dialog.advancedLabel}
-          </summary>
-          <div className="border-t border-surface-muted px-3.5 py-3 text-sm text-ink-soft">
-            <p className="mb-2">
-              {t.dialog.advancedDescription}
-            </p>
-            {task?.googleEventLink ? (
-              <a href={task.googleEventLink} target="_blank" rel="noreferrer" className="text-accent hover:underline font-medium">
-                {t.dialog.openGoogleCalendar}
-              </a>
-            ) : (
-              <p className="text-ink-faint italic">{t.dialog.syncToAccessAdvanced}</p>
-            )}
+        {!isEvent && (
+          <div>
+            <TaskChecklist
+              items={draft.checklist ?? []}
+              onChange={(checklist) => setDraft((d) => ({ ...d, checklist }))}
+            />
           </div>
-        </details>
+        )}
 
         <button
           type="button"
           onClick={submit}
-          className="w-full rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
+          disabled={isEvent && !draft.googleCalendarId}
+          className="w-full rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90 disabled:opacity-50"
         >
           {t.dialog.submit}
         </button>

@@ -14,7 +14,7 @@ export const taskDraftSchema = z.object({
   dueDate: z.string().max(32).default(""),
   status: z.enum(TASK_STATUSES),
   checklist: z.array(checklistItemSchema).default([]),
-  doneAt: z.number().int().nonnegative().optional(),
+  doneAt: z.number().int().nonnegative().optional().nullable(),
   source: z.enum(["local", "google"]).default("local"),
   syncStatus: z.enum(["local_only", "synced", "pending_sync", "error"]).default("local_only"),
   startAt: z.string().max(32).optional(),

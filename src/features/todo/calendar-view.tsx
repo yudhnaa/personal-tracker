@@ -7,45 +7,61 @@ import { Modal } from "../../components/modal";
 import { STATUS_META, type Task } from "./task-types";
 import { messages, type Locale } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
-import { useConfirm } from "../../components/confirm-dialog";
-import {
-  GoogleCalendarEventDetailDialog,
-  GoogleCalendarEventDialog,
-} from "../google-calendar/google-calendar-event-dialog";
 import type { UseGoogleCalendarResult } from "../google-calendar/use-google-calendar";
-import type { GoogleCalendarEvent, GoogleCalendarEventDraft } from "../google-calendar/types";
+import type { GoogleCalendarEvent } from "../google-calendar/types";
 
 type CalendarViewProps = {
   tasks: Task[];
   googleCalendar: UseGoogleCalendarResult;
-  onOpen: (task: Task) => void;
+  onOpenTask: (task: Task) => void;
+  onOpenEvent: (event: GoogleCalendarEvent) => void;
   onCreateOn: (dateIso: string) => void;
-  onConvert?: (event: GoogleCalendarEvent) => void;
 };
 
-/** Month grid that drops each task onto its due date. */
-export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConvert }: CalendarViewProps) {
+export function CalendarView({ tasks, googleCalendar, onOpenTask, onOpenEvent, onCreateOn }: CalendarViewProps) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
   });
-  const confirm = useConfirm();
   const locale = useLocale();
   const t = messages[locale].features.todo;
-  /** ISO date whose task list is shown in the day-detail dialog, or null. */
   const [dayView, setDayView] = useState<string | null>(null);
-  const [createEventDate, setCreateEventDate] = useState<string | null>(null);
-  const [detailEvent, setDetailEvent] = useState<GoogleCalendarEvent | null>(null);
-  const [editEvent, setEditEvent] = useState<GoogleCalendarEvent | null>(null);
+
+function getSpanDates(startStr: string, endStr: string | null | undefined, isGoogleAllDay: boolean): string[] {
+  const startIso = startStr.slice(0, 10);
+  if (!endStr) return [startIso];
+  const endIso = endStr.slice(0, 10);
+  if (startIso === endIso) return [startIso];
+
+  const dates: string[] = [];
+  const startD = new Date(startIso + "T00:00:00");
+  const endD = new Date(endIso + "T00:00:00");
+  
+  if (isGoogleAllDay) {
+    endD.setDate(endD.getDate() - 1);
+  }
+  
+  if (startD > endD) return [startIso];
+
+  let current = new Date(startD);
+  while (current <= endD) {
+    dates.push(toIsoDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return dates.length > 0 ? dates : [startIso];
+}
 
   const byDate = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const t of tasks) {
-      const dateKey = t.startAt ? t.startAt.slice(0, 10) : t.dueDate;
-      if (!dateKey) continue;
-      const list = map.get(dateKey) ?? [];
-      list.push(t);
-      map.set(dateKey, list);
+      const startStr = t.startAt || t.dueDate;
+      if (!startStr) continue;
+      const dates = getSpanDates(startStr, t.endAt, false);
+      for (const dateKey of dates) {
+        const list = map.get(dateKey) ?? [];
+        list.push(t);
+        map.set(dateKey, list);
+      }
     }
     return map;
   }, [tasks]);
@@ -59,23 +75,23 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
     for (const event of googleCalendar.events) {
       if (linkedEventIds.has(event.id)) continue;
       
-      // If a task is pending sync, it might have been created on Google Calendar 
-      // but the local task doesn't have the event ID yet. Hide the event to prevent duplication.
       const isPending = tasks.some(
         (t) => t.googleCalendarId === event.calendarId && !t.googleEventId && t.title === event.title
       );
       if (isPending) continue;
 
-      const iso = eventDate(event);
-      const list = map.get(iso) ?? [];
-      list.push(event);
-      map.set(iso, list);
+      const dates = getSpanDates(event.start, event.end, event.allDay);
+      for (const iso of dates) {
+        const list = map.get(iso) ?? [];
+        list.push(event);
+        map.set(iso, list);
+      }
     }
     for (const [iso, events] of map) {
       map.set(iso, events.sort((a, b) => eventSortKey(a).localeCompare(eventSortKey(b))));
     }
     return map;
-  }, [googleCalendar.events, linkedEventIds]);
+  }, [googleCalendar.events, linkedEventIds, tasks]);
 
   const cells = useMemo(
     () => buildMonthCells(cursor.year, cursor.month),
@@ -106,26 +122,6 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
   );
 
   const googleConnected = googleCalendar.connection.connected && !googleCalendar.connection.reconnectRequired;
-
-  function createGoogleEvent(draft: GoogleCalendarEventDraft) {
-    void googleCalendar.createEvent(draft);
-  }
-
-  function updateGoogleEvent(event: GoogleCalendarEvent, draft: GoogleCalendarEventDraft) {
-    void googleCalendar.updateEvent(event, draft);
-  }
-
-  async function deleteGoogleEvent(event: GoogleCalendarEvent) {
-    const ok = await confirm({
-      title: t.calendar.eventDetail.deleteTitle,
-      message: t.calendar.eventDetail.deleteMessage(event.title),
-      confirmLabel: t.calendar.eventDetail.deleteConfirm,
-      danger: true,
-    });
-    if (!ok) return;
-    await googleCalendar.deleteEvent(event);
-    setDetailEvent(null);
-  }
 
   return (
     <>
@@ -195,7 +191,7 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
                       key={`task-${item.task.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpen(item.task);
+                        onOpenTask(item.task);
                       }}
                       className={cn(
                         "flex cursor-pointer items-center justify-between gap-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-tight",
@@ -210,7 +206,7 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
                       key={`event-${item.event.calendarId}-${item.event.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDetailEvent(item.event);
+                        onOpenEvent(item.event);
                       }}
                       className="flex cursor-pointer items-center gap-1 truncate rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
                     >
@@ -247,7 +243,7 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
                     key={`task-${item.task.id}`}
                     type="button"
                     onClick={() => {
-                      onOpen(item.task);
+                      onOpenTask(item.task);
                       setDayView(null);
                     }}
                     className="flex w-full items-start gap-3 rounded-[var(--radius-inner)] bg-surface-sunken px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
@@ -281,7 +277,7 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
                     key={`event-${item.event.calendarId}-${item.event.id}`}
                     type="button"
                     onClick={() => {
-                      setDetailEvent(item.event);
+                      onOpenEvent(item.event);
                       setDayView(null);
                     }}
                     className="flex w-full items-start gap-3 rounded-[var(--radius-inner)] bg-violet-50 px-3 py-2.5 text-left transition-colors hover:bg-violet-100 dark:bg-violet-500/15 dark:hover:bg-violet-500/20"
@@ -320,59 +316,12 @@ export function CalendarView({ tasks, googleCalendar, onOpen, onCreateOn, onConv
             <Plus size={16} />
             {t.calendar.addTaskForDay}
           </button>
-          {googleConnected ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (dayView) setCreateEventDate(dayView);
-                setDayView(null);
-              }}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-surface-muted py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover"
-            >
-              <CalendarClock size={16} />
-              {t.calendar.addEventForDay}
-            </button>
-          ) : null}
         </div>
       </Modal>
-
-      <GoogleCalendarEventDialog
-        open={createEventDate !== null}
-        dateIso={createEventDate ?? undefined}
-        calendars={googleCalendar.calendars}
-        locale={locale}
-        onClose={() => setCreateEventDate(null)}
-        onSubmit={createGoogleEvent}
-      />
-
-      <GoogleCalendarEventDialog
-        open={editEvent !== null}
-        event={editEvent}
-        calendars={googleCalendar.calendars}
-        locale={locale}
-        onClose={() => setEditEvent(null)}
-        onSubmit={(draft) => {
-          if (editEvent) updateGoogleEvent(editEvent, draft);
-        }}
-      />
-
-      <GoogleCalendarEventDetailDialog
-        event={detailEvent}
-        locale={locale}
-        onClose={() => setDetailEvent(null)}
-        onEdit={(event) => {
-          setDetailEvent(null);
-          setEditEvent(event);
-        }}
-        onDelete={deleteGoogleEvent}
-        onConvert={onConvert}
-        formatTimeRange={(event) => formatEventTimeRange(event, locale)}
-      />
     </>
   );
 }
 
-/** Full localized date label for the day-detail dialog title. */
 function formatFullDate(iso: string, locale: Locale): string {
   const d = new Date(iso + "T00:00:00");
   const t = messages[locale].features.todo;
@@ -385,7 +334,6 @@ function formatFullDate(iso: string, locale: Locale): string {
 
 type Cell = { iso: string; day: number; inMonth: boolean };
 
-/** Build a Monday-first grid with exactly the weeks the month spans. */
 function buildMonthCells(year: number, month: number): Cell[] {
   const first = new Date(year, month, 1);
   const offset = (first.getDay() + 6) % 7; // Mon = 0

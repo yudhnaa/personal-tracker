@@ -8,14 +8,18 @@ export const metadata: Metadata = {
   description: "A private Bento-grid dashboard for everyday planning.",
 };
 
+import { QueryProvider } from "@/components/query-provider";
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getRequestLocale();
   return (
     <html lang={locale} suppressHydrationWarning>
       <body>
-        <LocaleProvider value={locale}>
-          {children}
-        </LocaleProvider>
+        <QueryProvider>
+          <LocaleProvider value={locale}>
+            {children}
+          </LocaleProvider>
+        </QueryProvider>
       </body>
     </html>
   );

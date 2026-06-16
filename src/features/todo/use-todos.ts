@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../../lib/api-client";
 import { useApiState } from "../../lib/use-api-state";
 import { TASK_STATUSES, type Task, type TaskStatus } from "./task-types";
@@ -79,20 +80,47 @@ export function useTodos() {
   }
 
   function updateTask(id: string, draft: TaskDraft) {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...draft } : t)),
-    );
+    patchTask(id, draft);
   }
 
   /** Inline auto-save: merge a partial patch into one task. */
   function patchTask(id: string, patch: Partial<Omit<Task, "id" | "createdAt">>) {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    let nextDoneAt: number | undefined | null = patch.doneAt;
+    let didChange = false;
+
+    setRawTasks((prev) => {
+      const target = prev.find((t) => t.id === id);
+      if (!target) return prev;
+      didChange = true;
+
+      const merged = { ...target, ...patch };
+      const afterStamp = stampDone([merged])[0];
+      nextDoneAt = afterStamp.doneAt;
+
+      return prev.map((t) => (t.id === id ? afterStamp : t));
+    });
+
+    if (!didChange) return;
+
+    const serverPatch: Record<string, any> = { ...patch };
+    if (patch.status !== undefined) {
+      serverPatch.doneAt = nextDoneAt === undefined ? null : nextDoneAt;
+    }
+
+    void commit(
+      apiJson<Task[]>(`/api/todos/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(serverPatch),
+      }),
+      async () => {
+        await reload();
+        return tasks;
+      }
     );
   }
 
   function moveTask(id: string, status: TaskStatus) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+    patchTask(id, { status });
   }
 
   /** Replace the whole task list — used by drag-sort to persist new order/status. */
@@ -100,7 +128,18 @@ export function useTodos() {
     setTasks(next);
   }
 
+  const queryClient = useQueryClient();
+
   function removeTask(id: string) {
+    const taskToDelete = tasks.find((t) => t.id === id);
+    if (taskToDelete?.googleEventId) {
+      // Optimistically remove the linked event from the frontend calendar cache
+      // so it doesn't pop up while the backend delete job is processing.
+      queryClient.setQueriesData<{ id: string }[]>(
+        { queryKey: ["/api/google-calendar/events"] },
+        (old) => (old ? old.filter((e) => e.id !== taskToDelete.googleEventId) : old)
+      );
+    }
     setRawTasks((prev) => prev.filter((t) => t.id !== id));
     void commit(apiJson<Task[]>(`/api/todos/${id}`, { method: "DELETE" }), async () => {
       await reload();
