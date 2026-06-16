@@ -45,6 +45,8 @@ export function NotesCard({ className }: { className?: string }) {
       }
     >
       <textarea
+        id="notes-content"
+        name="notes-content"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={t.placeholder}

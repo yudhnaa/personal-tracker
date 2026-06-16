@@ -12,7 +12,6 @@ const PERSIST_ALLOWLIST = [
   "/api/notes",
   "/api/todos",
   "/api/settings",
-  "/api/google-calendar/connection",
   "/api/google-calendar/events",
 ];
 

@@ -63,6 +63,9 @@ export function TaskDialog({
   useEffect(() => {
     if (!open) return;
     const firstCalendarId = enabledGoogleCalendars[0]?.id ?? "";
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+    
     setDraft(
       task
         ? {
@@ -78,13 +81,25 @@ export function TaskDialog({
             allDay: task.allDay ?? false,
             location: task.location ?? "",
           }
-        : { ...EMPTY, type: defaultType, googleCalendarId: "" },
+        : {
+            ...EMPTY,
+            type: defaultType,
+            googleCalendarId: "",
+            startAt: now.toISOString(),
+            endAt: oneHourLater.toISOString(),
+            dueDate: format(now, "yyyy-MM-dd"),
+          },
     );
-  }, [enabledGoogleCalendars, open, task, defaultType]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, task?.id, defaultType]);
 
   function submit() {
     if (!draft.title.trim()) return;
     if (draft.type === "event" && !draft.googleCalendarId) return; // Events require a calendar
+    if (draft.type === "event" && (!draft.startAt || !draft.endAt)) {
+      alert("Start and End times are required for events.");
+      return;
+    }
     void onSubmit({
       ...draft,
       title: draft.title.trim(),
