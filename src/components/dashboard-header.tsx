@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-	LayoutDashboard,
 	Settings as SettingsIcon,
 	UserCircle,
 } from "lucide-react";
@@ -29,9 +28,10 @@ export function DashboardHeader({
 	return (
 		<header className="flex shrink-0 items-center justify-between gap-3 rounded-[var(--radius-card)] bg-surface px-4 py-2">
 			<div className="flex min-w-0 items-center gap-3">
-				<LayoutDashboard
-					size={18}
-					strokeWidth={2}
+				<img
+					src="/logo.png"
+					alt="Logo"
+					className="h-6 w-6 rounded-md object-contain"
 				/>
 				<h1 className="truncate text-lg font-semibold tracking-tight text-ink">
 					{title}
