@@ -38,17 +38,6 @@ export async function POST(request: NextRequest) {
 
   if (task.googleCalendarId && !task.googleEventId) {
     task.syncStatus = "pending_sync";
-
-    try {
-      await googleCalendarQueue.add("createEvent", {
-        type: "createEvent",
-        userId,
-        todoId: task.id,
-      });
-    } catch (e) {
-      console.error("Failed to enqueue Google Calendar sync", e);
-      task.syncStatus = "error";
-    }
   }
 
   await db.insert(todos).values({
@@ -74,7 +63,19 @@ export async function POST(request: NextRequest) {
     googleEventPayload: task.googleEventPayload ?? null,
   });
 
-
+  if (task.googleCalendarId && !task.googleEventId) {
+    try {
+      await googleCalendarQueue.add("createEvent", {
+        type: "createEvent",
+        userId,
+        todoId: task.id,
+      });
+    } catch (e) {
+      console.error("Failed to enqueue Google Calendar sync", e);
+      await db.update(todos).set({ syncStatus: "error" }).where(eq(todos.id, task.id));
+      task.syncStatus = "error";
+    }
+  }
 
   return NextResponse.json(task, { status: 201 });
 }
