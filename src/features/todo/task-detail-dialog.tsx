@@ -9,25 +9,26 @@ import { TaskChecklist } from "./task-checklist";
 import { STATUS_META, TASK_STATUSES, type Task } from "./task-types";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
+import type { GoogleCalendarEvent, GoogleCalendarEventPatch } from "../google-calendar/types";
 
 type TaskDetailDialogProps = {
   task: Task | null;
+  event: GoogleCalendarEvent | null;
   onClose: () => void;
-  onPatch: (patch: Partial<Task>) => void;
-  onDelete: () => void;
+  onPatchTask?: (patch: Partial<Task>) => void;
+  onDeleteTask?: () => void;
+  onPatchEvent?: (patch: GoogleCalendarEventPatch) => void;
+  onDeleteEvent?: () => void;
 };
 
-/**
- * Trello-style "card back": each field edits inline and saves immediately.
- * A pinned header (status, title, due date) sits above a two-column body —
- * Description and Checklist scroll independently so neither can blow up the
- * dialog height. Delete hides behind a quiet header icon with a confirm.
- */
 export function TaskDetailDialog({
   task,
+  event,
   onClose,
-  onPatch,
-  onDelete,
+  onPatchTask,
+  onDeleteTask,
+  onPatchEvent,
+  onDeleteEvent,
 }: TaskDetailDialogProps) {
   const confirm = useConfirm();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -37,47 +38,78 @@ export function TaskDetailDialog({
   const locale = useLocale();
   const t = messages[locale].features.todo;
 
-  // Re-seed local buffers whenever a different task opens.
+  const activeItem = task || event;
+  const isEvent = !!event;
+
   useEffect(() => {
-    if (task) {
-      setTitle(task.title);
-      setDesc(task.description);
+    if (activeItem) {
+      setTitle(activeItem.title);
+      setDesc(activeItem.description || "");
       setEditingTitle(false);
       setEditingDesc(false);
     }
-  }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeItem?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!task) {
+  if (!activeItem) {
     return <Modal open={false} title="" onClose={onClose} children={null} />;
   }
 
   function commitTitle() {
     const clean = title.trim();
-    if (clean && clean !== task!.title) onPatch({ title: clean });
-    else setTitle(task!.title);
+    if (clean && clean !== activeItem!.title) {
+      if (isEvent) onPatchEvent?.({ title: clean });
+      else onPatchTask?.({ title: clean });
+    } else {
+      setTitle(activeItem!.title);
+    }
     setEditingTitle(false);
   }
 
   function commitDesc() {
-    if (desc !== task!.description) onPatch({ description: desc });
+    if (desc !== (activeItem!.description || "")) {
+      if (isEvent) onPatchEvent?.({ description: desc });
+      else onPatchTask?.({ description: desc });
+    }
     setEditingDesc(false);
   }
 
   async function handleDelete() {
     const ok = await confirm({
       title: t.detail.deleteTitle,
-      message: t.detail.deleteMessage(task!.title),
+      message: t.detail.deleteMessage(activeItem!.title),
       confirmLabel: t.detail.deleteConfirm,
       danger: true,
     });
     if (ok) {
-      onDelete();
+      if (isEvent) onDeleteEvent?.();
+      else onDeleteTask?.();
       onClose();
     }
   }
 
-  // Status pills live in the modal header (replacing a redundant "Chi tiết" title).
-  const statusPills = (
+  function patchDate(patch: { startAt?: string; endAt?: string; dueDate?: string; allDay?: boolean }) {
+    if (isEvent) {
+      const e = event!;
+      const start = patch.startAt ?? e.start;
+      const end = patch.endAt ?? e.end;
+      const allDay = patch.allDay ?? e.allDay;
+      onPatchEvent?.({
+        start: allDay ? start.slice(0, 10) : start,
+        end: allDay ? end.slice(0, 10) : end,
+        allDay,
+      });
+    } else {
+      onPatchTask?.(patch);
+    }
+  }
+
+  function patchLocation(location: string) {
+    if (isEvent) onPatchEvent?.({ location });
+    else onPatchTask?.({ location });
+  }
+
+  // Status pills live in the modal header
+  const statusPills = !isEvent && task ? (
     <div className="flex flex-wrap gap-1.5">
       {TASK_STATUSES.map((s) => {
         const active = task.status === s;
@@ -85,7 +117,7 @@ export function TaskDetailDialog({
           <button
             key={s}
             type="button"
-            onClick={() => onPatch({ status: s })}
+            onClick={() => onPatchTask?.({ status: s })}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
               active
@@ -104,6 +136,12 @@ export function TaskDetailDialog({
         );
       })}
     </div>
+  ) : (
+    <div className="flex items-center">
+      <span className="shrink-0 rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+        Google Event
+      </span>
+    </div>
   );
 
   const deleteAction = (
@@ -117,10 +155,15 @@ export function TaskDetailDialog({
     </IconButton>
   );
 
+  const currentStartAt = isEvent ? event!.start : task!.startAt ?? task!.dueDate;
+  const currentEndAt = isEvent ? event!.end : task!.endAt ?? "";
+  const currentAllDay = isEvent ? event!.allDay : task!.allDay ?? false;
+  const currentLocation = isEvent ? event!.location : task!.location;
+  const currentLink = isEvent ? event!.htmlLink : task!.googleEventLink;
+
   return (
     <Modal
       open
-      wide
       title={statusPills}
       headerAction={deleteAction}
       onClose={onClose}
@@ -136,9 +179,8 @@ export function TaskDetailDialog({
             onKeyDown={(e) => {
               if (e.key === "Enter") commitTitle();
               if (e.key === "Escape") {
-                // Exit the inline edit only — don't let Modal catch Esc + close.
                 e.stopPropagation();
-                setTitle(task.title);
+                setTitle(activeItem.title);
                 setEditingTitle(false);
               }
             }}
@@ -150,7 +192,7 @@ export function TaskDetailDialog({
             onClick={() => setEditingTitle(true)}
             className="-mx-2 block w-[calc(100%+1rem)] break-words rounded-[var(--radius-inner)] px-2 py-1 text-left text-lg font-semibold leading-snug text-ink transition-colors hover:bg-surface-sunken"
           >
-            {task.title}
+            {activeItem.title}
           </button>
         )}
 
@@ -163,24 +205,24 @@ export function TaskDetailDialog({
             <label className="flex items-center gap-2 text-sm text-ink-faint cursor-pointer">
               <input
                 type="checkbox"
-                checked={task.allDay}
-                onChange={(e) => onPatch({ allDay: e.target.checked })}
+                checked={currentAllDay}
+                onChange={(e) => patchDate({ allDay: e.target.checked })}
                 className="rounded border-surface-muted accent-accent"
               />
               {t.detail.allDayLabel}
             </label>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            {task.allDay ? (
+            {currentAllDay ? (
               <>
                 <DatePicker
-                  value={task.startAt ?? task.dueDate}
-                  onChange={(iso) => onPatch({ startAt: iso, dueDate: iso })}
+                  value={currentStartAt}
+                  onChange={(iso) => patchDate({ startAt: iso, dueDate: iso })}
                   placeholder={t.detail.startDatePlaceholder}
                 />
                 <DatePicker
-                  value={task.endAt ?? ""}
-                  onChange={(iso) => onPatch({ endAt: iso })}
+                  value={currentEndAt}
+                  onChange={(iso) => patchDate({ endAt: iso })}
                   placeholder={t.detail.endDatePlaceholder}
                 />
               </>
@@ -189,26 +231,26 @@ export function TaskDetailDialog({
                 <input
                   type="datetime-local"
                   value={
-                    task.startAt && !isNaN(new Date(task.startAt).getTime())
-                      ? format(new Date(task.startAt), "yyyy-MM-dd'T'HH:mm")
+                    currentStartAt && !isNaN(new Date(currentStartAt).getTime())
+                      ? format(new Date(currentStartAt), "yyyy-MM-dd'T'HH:mm")
                       : ""
                   }
                   onChange={(e) => {
                     const iso = e.target.value ? new Date(e.target.value).toISOString() : "";
-                    onPatch({ startAt: iso, dueDate: iso ? iso.slice(0, 10) : "" });
+                    patchDate({ startAt: iso, dueDate: iso ? iso.slice(0, 10) : "" });
                   }}
                   className="w-full flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
                 />
                 <input
                   type="datetime-local"
                   value={
-                    task.endAt && !isNaN(new Date(task.endAt).getTime())
-                      ? format(new Date(task.endAt), "yyyy-MM-dd'T'HH:mm")
+                    currentEndAt && !isNaN(new Date(currentEndAt).getTime())
+                      ? format(new Date(currentEndAt), "yyyy-MM-dd'T'HH:mm")
                       : ""
                   }
                   onChange={(e) => {
                     const iso = e.target.value ? new Date(e.target.value).toISOString() : "";
-                    onPatch({ endAt: iso });
+                    patchDate({ endAt: iso });
                   }}
                   className="w-full flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
                 />
@@ -223,8 +265,8 @@ export function TaskDetailDialog({
             {t.detail.locationLabel}
           </p>
           <input
-            value={task.location ?? ""}
-            onChange={(e) => onPatch({ location: e.target.value })}
+            value={currentLocation ?? ""}
+            onChange={(e) => patchLocation(e.target.value)}
             placeholder={t.detail.locationPlaceholder}
             className="w-full rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
           />
@@ -245,7 +287,7 @@ export function TaskDetailDialog({
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.stopPropagation();
-                  setDesc(task.description);
+                  setDesc(activeItem.description || "");
                   setEditingDesc(false);
                 }
               }}
@@ -258,21 +300,23 @@ export function TaskDetailDialog({
               onClick={() => setEditingDesc(true)}
               className={cn(
                 "block max-h-[34vh] w-full overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-inner)] bg-surface-sunken p-3 text-left text-sm leading-relaxed transition-colors hover:bg-surface-muted",
-                task.description ? "text-ink" : "text-ink-faint",
+                activeItem.description ? "text-ink" : "text-ink-faint",
               )}
             >
-              {task.description || t.detail.descriptionPlaceholder}
+              {activeItem.description || t.detail.descriptionPlaceholder}
             </button>
           )}
         </div>
 
         {/* Checklist. */}
-        <div>
-          <TaskChecklist
-            items={task.checklist ?? []}
-            onChange={(checklist) => onPatch({ checklist })}
-          />
-        </div>
+        {!isEvent && task && (
+          <div>
+            <TaskChecklist
+              items={task.checklist ?? []}
+              onChange={(checklist) => onPatchTask?.({ checklist })}
+            />
+          </div>
+        )}
 
         {/* Advanced / Meta */}
         <details className="group rounded-[var(--radius-inner)] border border-surface-muted [&_summary::-webkit-details-marker]:hidden">
@@ -283,8 +327,8 @@ export function TaskDetailDialog({
             <p className="mb-2">
               {t.detail.advancedDescription}
             </p>
-            {task?.googleEventLink ? (
-              <a href={task.googleEventLink} target="_blank" rel="noreferrer" className="text-accent hover:underline font-medium">
+            {currentLink ? (
+              <a href={currentLink} target="_blank" rel="noreferrer" className="text-accent hover:underline font-medium">
                 {t.detail.openGoogleCalendar}
               </a>
             ) : (

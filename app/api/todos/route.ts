@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   if ("response" in parsed) return parsed.response;
   const body = parsed.data;
   const current = await getTodos(userId);
-  const task: Task = { ...body, id: createId(), createdAt: Date.now() };
+  const task: Task = { ...body, doneAt: body.doneAt ?? undefined, id: createId(), createdAt: Date.now() };
 
   if (task.googleCalendarId && !task.googleEventId) {
     task.syncStatus = "pending_sync";
@@ -84,7 +84,8 @@ export async function PUT(request: NextRequest) {
   if (!userId) return unauthorized();
   const parsed = await parseJson(request, taskSchema.array());
   if ("response" in parsed) return parsed.response;
-  return NextResponse.json(await replaceTodos(userId, parsed.data));
+  const tasks = parsed.data.map(t => ({ ...t, doneAt: t.doneAt ?? undefined }));
+  return NextResponse.json(await replaceTodos(userId, tasks as Task[]));
 }
 
 export async function DELETE(request: NextRequest) {

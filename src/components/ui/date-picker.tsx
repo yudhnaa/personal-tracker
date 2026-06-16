@@ -26,7 +26,7 @@ export function DatePicker({
 	clearable = true,
 }: DatePickerProps) {
 	const [open, setOpen] = useState(false);
-	const selected = value ? new Date(value + "T00:00:00") : undefined;
+	const selected = value ? new Date(value.slice(0, 10) + "T00:00:00") : undefined;
 	const locale = useLocale();
 	const t = messages[locale].components.datePicker;
 	const resolvedPlaceholder = placeholder ?? t.placeholder;

@@ -61,7 +61,7 @@ export function GoogleCalendarSettingsPanel({
             </p>
             <button
               type="button"
-              onClick={calendar.loadCalendars}
+              onClick={() => void calendar.loadCalendars()}
               className="flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-surface-hover disabled:opacity-60"
               disabled={calendar.calendarsLoading}
             >

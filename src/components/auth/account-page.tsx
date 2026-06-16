@@ -33,6 +33,7 @@ export function AccountPage({
 
 	async function logout() {
 		await fetch("/api/auth/sign-out", { method: "POST" });
+		localStorage.removeItem("pt_query_cache");
 		router.push("/login");
 		router.refresh();
 	}

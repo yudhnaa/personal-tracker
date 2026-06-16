@@ -7,13 +7,13 @@ import { useLocalStorage } from "../../lib/use-local-storage";
 import { CalendarView } from "./calendar-view";
 import { KanbanBoard } from "./kanban-board";
 import { TaskDetailDialog } from "./task-detail-dialog";
-import { TaskDialog, type TaskDialogDraft } from "./task-dialog";
+import { TaskDialog, type ItemDialogDraft, type ItemType } from "./task-dialog";
 import type { Task, TaskStatus } from "./task-types";
 import { useTodos } from "./use-todos";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 import type { UseGoogleCalendarResult } from "../google-calendar/use-google-calendar";
-import type { GoogleCalendarEvent } from "../google-calendar/types";
+import type { GoogleCalendarEvent, GoogleCalendarEventDraft } from "../google-calendar/types";
 
 type View = "board" | "calendar";
 
@@ -23,10 +23,8 @@ type TodoCardProps = {
   googleCalendar: UseGoogleCalendarResult;
 };
 
-/** Main 2x2 tracker: kanban board or calendar over the same task list. */
 export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardProps) {
-  const { tasks, byStatus, addTask, patchTask, reorderTasks, removeTask } =
-    useTodos();
+  const { tasks, byStatus, addTask, patchTask, reorderTasks, removeTask } = useTodos();
   const [view, setView] = useLocalStorage<View>("pt.todo-view", "board");
   const [mounted, setMounted] = useState(false);
   
@@ -34,29 +32,54 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
     setMounted(true);
   }, []);
 
-  // Creating uses the quick form; opening an existing card uses the detail view.
-  const [createTask, setCreateTask] = useState<Task | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const detailTask = detailId
-    ? (tasks.find((t) => t.id === detailId) ?? null)
-    : null;
+  // Creating uses the quick form
+  const [createItem, setCreateItem] = useState<{ task: Task | null, type: ItemType } | null>(null);
+  
+  // Opening an existing card uses the detail view
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const detailTask = detailTaskId ? (tasks.find((t) => t.id === detailTaskId) ?? null) : null;
+  
+  const [detailEvent, setDetailEvent] = useState<GoogleCalendarEvent | null>(null);
+
   const locale = useLocale();
   const t = messages[locale].features.todo;
   const activeView = mounted ? view : "board";
 
-  function openNew(opts: { dueDate?: string; status?: TaskStatus } = {}) {
-    setCreateTask({
-      ...BLANK,
-      dueDate: opts.dueDate ?? "",
-      status: opts.status ?? "todo",
-    } as Task);
+  function openNew(opts: { dueDate?: string; status?: TaskStatus; type?: ItemType } = {}) {
+    setCreateItem({
+      task: {
+        ...BLANK,
+        dueDate: opts.dueDate ?? "",
+        status: opts.status ?? "todo",
+      } as Task,
+      type: opts.type ?? "task",
+    });
   }
 
-  async function addTaskAndSync(draft: TaskDialogDraft) {
-    // Pass the full draft including googleCalendarId to the backend
-    // The backend will create the Google event and save the googleEventId,
-    // ensuring the task and event are properly linked.
-    await addTask(draft);
+  async function handleCreateSubmit(draft: ItemDialogDraft) {
+    if (draft.type === "task") {
+      await addTask(draft);
+    } else {
+      await googleCalendar.createEvent({
+        title: draft.title,
+        description: draft.description,
+        location: draft.location,
+        start: draft.startAt || draft.dueDate, // TaskDialog returns iso format
+        end: draft.endAt || "",
+        allDay: draft.allDay,
+        calendarId: draft.googleCalendarId!,
+      });
+    }
+  }
+
+  async function handlePatchEvent(patch: GoogleCalendarEventDraft) {
+    if (detailEvent) {
+      await googleCalendar.updateEvent(detailEvent, patch);
+      setDetailEvent(null); // Optimistically close or it might jump?
+      // Wait, we probably want to update the local state to reflect changes instantly,
+      // but `use-google-calendar.ts` handles optimistic updates! So the event reference changes.
+      // Better to close it for now, or just let it re-render. Let's just close it.
+    }
   }
 
   async function convertEventToTask(event: GoogleCalendarEvent) {
@@ -120,7 +143,7 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
         <KanbanBoard
           byStatus={byStatus}
           onReorder={reorderTasks}
-          onOpen={(task) => setDetailId(task.id)}
+          onOpen={(task) => setDetailTaskId(task.id)}
           onAddTask={(status) => openNew({ status })}
           archiveDays={archiveDays}
         />
@@ -128,26 +151,50 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
         <CalendarView
           tasks={tasks}
           googleCalendar={googleCalendar}
-          onOpen={(task) => setDetailId(task.id)}
+          onOpenTask={(task) => setDetailTaskId(task.id)}
+          onOpenEvent={(event) => setDetailEvent(event)}
           onCreateOn={(date) => openNew({ dueDate: date })}
-          onConvert={convertEventToTask}
         />
       )}
 
       <TaskDialog
-        open={createTask !== null}
-        task={createTask}
+        open={createItem !== null}
+        task={createItem?.task ?? null}
+        defaultType={createItem?.type ?? "task"}
         googleCalendarConnected={googleCalendar.connection.connected && !googleCalendar.connection.reconnectRequired}
         googleCalendars={googleCalendar.calendars}
-        onClose={() => setCreateTask(null)}
-        onSubmit={addTaskAndSync}
+        onClose={() => setCreateItem(null)}
+        onSubmit={handleCreateSubmit}
       />
 
       <TaskDetailDialog
         task={detailTask}
-        onClose={() => setDetailId(null)}
-        onPatch={(patch) => detailId && patchTask(detailId, patch)}
-        onDelete={() => detailId && removeTask(detailId)}
+        event={detailEvent}
+        onClose={() => {
+          setDetailTaskId(null);
+          setDetailEvent(null);
+        }}
+        onPatchTask={(patch) => detailTaskId && patchTask(detailTaskId, patch)}
+        onDeleteTask={() => detailTaskId && removeTask(detailTaskId)}
+        onPatchEvent={(patch) => {
+          if (detailEvent) {
+             const oldEvent = detailEvent;
+             setDetailEvent({ ...detailEvent, ...patch } as GoogleCalendarEvent);
+             googleCalendar.updateEvent(detailEvent, patch).then((newEvent) => {
+               if (newEvent) {
+                 setDetailEvent(newEvent);
+               } else {
+                 setDetailEvent(oldEvent); // Rollback on failure
+               }
+             });
+          }
+        }}
+        onDeleteEvent={() => {
+          if (detailEvent) {
+            googleCalendar.deleteEvent(detailEvent);
+            setDetailEvent(null);
+          }
+        }}
       />
     </BentoCard>
   );
@@ -161,12 +208,6 @@ const BLANK = {
   status: "todo" as const,
   createdAt: 0,
 };
-
-function nextDateIso(iso: string) {
-  const date = new Date(`${iso}T00:00:00`);
-  date.setDate(date.getDate() + 1);
-  return toIsoDate(date);
-}
 
 function ViewTab({
   active,
