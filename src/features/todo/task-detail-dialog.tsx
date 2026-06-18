@@ -10,6 +10,8 @@ import { STATUS_META, TASK_STATUSES, type Task } from "./task-types";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 import type { GoogleCalendarEvent, GoogleCalendarEventPatch } from "../google-calendar/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type TaskDetailDialogProps = {
   task: Task | null;
@@ -19,6 +21,7 @@ type TaskDetailDialogProps = {
   onDeleteTask?: () => void;
   onPatchEvent?: (patch: GoogleCalendarEventPatch) => void;
   onDeleteEvent?: () => void;
+  onConvertEvent?: (event: GoogleCalendarEvent) => void;
 };
 
 export function TaskDetailDialog({
@@ -29,6 +32,7 @@ export function TaskDetailDialog({
   onDeleteTask,
   onPatchEvent,
   onDeleteEvent,
+  onConvertEvent,
 }: TaskDetailDialogProps) {
   const confirm = useConfirm();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -144,15 +148,29 @@ export function TaskDetailDialog({
     </div>
   );
 
-  const deleteAction = (
-    <IconButton
-      aria-label={t.detail.deleteTooltip}
-      title={t.detail.deleteTooltip}
-      onClick={handleDelete}
-      className="bg-transparent text-ink-faint hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-    </IconButton>
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      {isEvent && onConvertEvent && (
+        <button
+          type="button"
+          onClick={() => {
+            onConvertEvent(event!);
+            onClose();
+          }}
+          className="rounded-full bg-surface-muted px-3 py-1 text-xs font-semibold text-ink-soft hover:bg-surface-hover hover:text-ink transition-colors"
+        >
+          {t.calendar.eventDetail.convertToTask}
+        </button>
+      )}
+      <IconButton
+        aria-label={t.detail.deleteTooltip}
+        title={t.detail.deleteTooltip}
+        onClick={handleDelete}
+        className="bg-transparent text-ink-faint hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </IconButton>
+    </div>
   );
 
   const currentStartAt = isEvent ? event!.start : task!.startAt ?? task!.dueDate;
@@ -165,7 +183,7 @@ export function TaskDetailDialog({
     <Modal
       open
       title={statusPills}
-      headerAction={deleteAction}
+      headerAction={headerActions}
       onClose={onClose}
     >
       <div className="space-y-5">
@@ -295,16 +313,29 @@ export function TaskDetailDialog({
               className="w-full resize-none rounded-[var(--radius-inner)] bg-surface-sunken p-3 text-sm leading-relaxed text-ink outline-none ring-2 ring-accent/40 placeholder:text-ink-faint"
             />
           ) : (
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setEditingDesc(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setEditingDesc(true);
+                }
+              }}
               className={cn(
-                "block max-h-[34vh] w-full overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-inner)] bg-surface-sunken p-3 text-left text-sm leading-relaxed transition-colors hover:bg-surface-muted",
-                activeItem.description ? "text-ink" : "text-ink-faint",
+                "block max-h-[34vh] w-full overflow-y-auto break-words rounded-[var(--radius-inner)] bg-surface-sunken p-3 text-left text-sm leading-relaxed transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-accent/40",
+                activeItem.description ? "prose prose-sm dark:prose-invert max-w-none text-ink" : "text-ink-faint",
               )}
             >
-              {activeItem.description || t.detail.descriptionPlaceholder}
-            </button>
+              {activeItem.description ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {activeItem.description}
+                </ReactMarkdown>
+              ) : (
+                t.detail.descriptionPlaceholder
+              )}
+            </div>
           )}
         </div>
 

@@ -14,6 +14,7 @@ Personal Tracker is a private Bento-grid dashboard for everyday planning. It com
 - motion animations
 - dnd-kit for Todo drag and drop
 - date-fns and react-day-picker for date UI
+- react-markdown and @tailwindcss/typography for Markdown rendering
 
 ## Local Setup
 

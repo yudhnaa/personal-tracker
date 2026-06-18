@@ -31,6 +31,7 @@ Personal Tracker uses a quiet Minimalism Bento Grid style: a photographic page b
 - Primary font token: Be Vietnam Pro with system UI fallback.
 - Dashboard headings are compact and practical, not hero-scale.
 - Cards use small labels, medium-weight titles, and restrained supporting text.
+- Task and Event descriptions support GitHub Flavored Markdown, rendered using `@tailwindcss/typography`.
 - Letter spacing stays neutral except for small uppercase landing eyebrows.
 
 ## Components

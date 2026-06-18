@@ -195,6 +195,7 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
             setDetailEvent(null);
           }
         }}
+        onConvertEvent={convertEventToTask}
       />
     </BentoCard>
   );

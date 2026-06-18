@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Dark mode is driven by a `.dark` class on <html>, not the OS setting. */
 @custom-variant dark (&:where(.dark, .dark *));
