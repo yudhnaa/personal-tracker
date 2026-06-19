@@ -1,4 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+// Dummy import to ensure Next.js standalone trace includes the migrator
+import "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import * as schema from "./schema";
 

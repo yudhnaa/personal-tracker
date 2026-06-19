@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  serverExternalPackages: ["drizzle-orm", "pg"],
 };
 
 export default nextConfig;
