@@ -19,15 +19,17 @@ export function todayIso(): string {
 /** Short Vietnamese label like "12 Th6" for chips and calendar cells. */
 export function formatShortDate(iso: string): string {
   if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
+  const d = new Date(iso.includes("T") ? iso : iso + "T00:00:00");
+  if (isNaN(d.getTime())) return "";
   return `${d.getDate()} Th${d.getMonth() + 1}`;
 }
 
 /** Relative urgency used to colour due-date chips. */
 export function dueState(iso: string): "none" | "overdue" | "today" | "upcoming" {
   if (!iso) return "none";
+  const dateOnly = iso.slice(0, 10);
   const today = todayIso();
-  if (iso < today) return "overdue";
-  if (iso === today) return "today";
+  if (dateOnly < today) return "overdue";
+  if (dateOnly === today) return "today";
   return "upcoming";
 }
