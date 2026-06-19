@@ -7,7 +7,15 @@ import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 
 /** A single free-form scratch note — no editor, no categories, just text. */
-export function NotesCard({ className }: { className?: string }) {
+export function NotesCard({
+  className,
+  editMode,
+  onHide,
+}: {
+  className?: string;
+  editMode?: boolean;
+  onHide?: () => void;
+}) {
   // Free text changes on every keystroke — debounce the write so a large note
   // doesn't re-serialize the whole string each key press.
   const { data: serverText, loading, commit, reload } = useApiState<string>("/api/notes", "");
@@ -41,6 +49,8 @@ export function NotesCard({ className }: { className?: string }) {
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
       action={
         <span className="text-xs font-medium text-ink-faint">
           {t.wordCount(words)}

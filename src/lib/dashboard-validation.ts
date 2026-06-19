@@ -34,6 +34,23 @@ export const taskSchema = taskDraftSchema.extend({
 
 export const taskPatchSchema = taskDraftSchema.partial();
 
+const layoutItemSchema = z.object({
+  i: z.string(),
+  x: z.number().int(),
+  y: z.number().int(),
+  w: z.number().int(),
+  h: z.number().int(),
+  minW: z.number().int().optional(),
+  maxW: z.number().int().optional(),
+  minH: z.number().int().optional(),
+  maxH: z.number().int().optional(),
+  moved: z.boolean().optional(),
+  static: z.boolean().optional(),
+  isDraggable: z.boolean().optional(),
+  isResizable: z.boolean().optional(),
+  isBounded: z.boolean().optional(),
+}).catchall(z.any());
+
 export const settingsPatchSchema = z
   .object({
     boardTitle: z.string().trim().min(1).max(120),
@@ -41,6 +58,8 @@ export const settingsPatchSchema = z
     primary: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     background: z.string().max(256),
     archiveDays: z.number().int().min(0).max(3650),
+    layout: z.record(z.string(), z.array(layoutItemSchema)).nullable(),
+    hiddenCards: z.array(z.string()),
   })
   .partial();
 

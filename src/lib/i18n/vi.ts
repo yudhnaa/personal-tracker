@@ -231,6 +231,7 @@ export const vi: Messages = {
 				localTask: "Nội bộ",
 				linkedTask: "Đã liên kết",
 				allDay: "Cả ngày",
+				convertToTask: "Chuyển thành task",
 				eventDialog: {
 					addTitle: "Thêm sự kiện Google Calendar",
 					editTitle: "Sửa sự kiện Google Calendar",

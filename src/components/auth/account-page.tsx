@@ -34,7 +34,8 @@ export function AccountPage({
 
 	async function logout() {
 		await authClient.signOut();
-		localStorage.removeItem("pt_query_cache");
+		localStorage.clear();
+		sessionStorage.clear();
 		router.push("/login");
 		router.refresh();
 	}

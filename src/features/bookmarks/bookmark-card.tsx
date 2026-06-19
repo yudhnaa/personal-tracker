@@ -13,7 +13,15 @@ import { GroupManagerDialog } from "./group-manager-dialog";
 import { useBookmarks } from "./use-bookmarks";
 
 /** Bookmark tracker: favicon list with optional category filtering. */
-export function BookmarkCard({ className }: { className?: string }) {
+export function BookmarkCard({
+  className,
+  editMode,
+  onHide,
+}: {
+  className?: string;
+  editMode?: boolean;
+  onHide?: () => void;
+}) {
   const {
     bookmarks,
     groups,
@@ -52,6 +60,8 @@ export function BookmarkCard({ className }: { className?: string }) {
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
       action={
         <>
           <button

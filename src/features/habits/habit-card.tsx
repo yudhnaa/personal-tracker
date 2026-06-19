@@ -9,7 +9,15 @@ import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 
 /** Daily habit tracker: check off today, see streak + last-7-days grid. */
-export function HabitCard({ className }: { className?: string }) {
+export function HabitCard({
+  className,
+  editMode,
+  onHide,
+}: {
+  className?: string;
+  editMode?: boolean;
+  onHide?: () => void;
+}) {
   const { habits, addHabit, removeHabit, toggleToday } = useHabits();
   const [draft, setDraft] = useState("");
   const locale = useLocale();
@@ -26,6 +34,8 @@ export function HabitCard({ className }: { className?: string }) {
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
     >
       <div className="flex h-full flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-0.5">

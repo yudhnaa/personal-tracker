@@ -7,7 +7,15 @@ import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 
 /** Pomodoro timer with fixed 25/5 and 50/10 presets and a progress ring. */
-export function PomodoroCard({ className }: { className?: string }) {
+export function PomodoroCard({
+  className,
+  editMode,
+  onHide,
+}: {
+  className?: string;
+  editMode?: boolean;
+  onHide?: () => void;
+}) {
   const p = usePomodoro();
   const mm = String(Math.floor(p.secondsLeft / 60)).padStart(2, "0");
   const ss = String(p.secondsLeft % 60).padStart(2, "0");
@@ -23,6 +31,8 @@ export function PomodoroCard({ className }: { className?: string }) {
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
       action={
         <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1">
           {p.presets.map((preset) => (

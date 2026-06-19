@@ -1,6 +1,7 @@
-import type { LucideIcon } from "lucide-react";
+import { EyeOff, GripVertical, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
+import { IconButton } from "./icon-button";
 
 type BentoCardProps = {
   icon: LucideIcon;
@@ -11,6 +12,8 @@ type BentoCardProps = {
   className?: string;
   /** When true the body scrolls instead of growing the card. */
   scrollBody?: boolean;
+  editMode?: boolean;
+  onHide?: () => void;
   children: ReactNode;
 };
 
@@ -25,25 +28,39 @@ export function BentoCard({
   action,
   className,
   scrollBody = true,
+  editMode,
+  onHide,
   children,
 }: BentoCardProps) {
   return (
     <section
       className={cn(
         "flex min-h-0 flex-col rounded-[var(--radius-card)] bg-surface",
+        editMode && "ring-2 ring-accent ring-inset",
         className,
       )}
     >
       <header className="flex h-16 shrink-0 items-center gap-3 px-5">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-inner)] bg-surface-muted text-ink">
-          <Icon size={18} strokeWidth={2} />
-        </span>
+        {editMode ? (
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-inner)] bg-surface-hover text-ink cursor-grab drag-handle active:cursor-grabbing">
+            <GripVertical size={18} strokeWidth={2} />
+          </span>
+        ) : (
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-inner)] bg-surface-muted text-ink">
+            <Icon size={18} strokeWidth={2} />
+          </span>
+        )}
         <h2 className="flex-1 truncate text-[15px] font-semibold tracking-tight text-ink">
           {title}
         </h2>
-        {action ? (
-          <div className="flex items-center gap-2">{action}</div>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {!editMode && action}
+          {editMode && onHide && (
+            <IconButton aria-label="Hide card" onClick={onHide}>
+              <EyeOff size={18} />
+            </IconButton>
+          )}
+        </div>
       </header>
       <div
         className={cn(

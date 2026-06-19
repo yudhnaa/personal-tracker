@@ -21,9 +21,11 @@ type TodoCardProps = {
   className?: string;
   archiveDays: number;
   googleCalendar: UseGoogleCalendarResult;
+  editMode?: boolean;
+  onHide?: () => void;
 };
 
-export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardProps) {
+export function TodoCard({ className, archiveDays, googleCalendar, editMode, onHide }: TodoCardProps) {
   const { tasks, byStatus, addTask, patchTask, reorderTasks, removeTask } = useTodos();
   const [view, setView] = useLocalStorage<View>("pt.todo-view", "board");
   const [mounted, setMounted] = useState(false);
@@ -108,6 +110,8 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
       action={
         <>
           <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1">
@@ -154,6 +158,7 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
           onOpenTask={(task) => setDetailTaskId(task.id)}
           onOpenEvent={(event) => setDetailEvent(event)}
           onCreateOn={(date) => openNew({ dueDate: date })}
+          onConvertEvent={convertEventToTask}
         />
       )}
 

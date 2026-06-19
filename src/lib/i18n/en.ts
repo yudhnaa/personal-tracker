@@ -223,6 +223,7 @@ export const en = {
 				localTask: "Local",
 				linkedTask: "Google Linked",
 				allDay: "All day",
+				convertToTask: "Convert to task",
 				eventDialog: {
 					addTitle: "Add Google Calendar event",
 					editTitle: "Edit Google Calendar event",

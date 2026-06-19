@@ -69,6 +69,8 @@ export async function getSettings(userId: string): Promise<Settings> {
         primary: stored.primary,
         background: stored.background,
         archiveDays: stored.archiveDays,
+        layout: stored.layout as Record<string, any> | null,
+        hiddenCards: stored.hiddenCards ? JSON.parse(stored.hiddenCards) : [],
       }
     : DEFAULT_SETTINGS;
 }
@@ -85,6 +87,8 @@ export async function upsertSettings(userId: string, patch: Partial<Settings>) {
       primary: next.primary,
       background: next.background,
       archiveDays: next.archiveDays,
+      layout: next.layout,
+      hiddenCards: JSON.stringify(next.hiddenCards || []),
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -95,6 +99,8 @@ export async function upsertSettings(userId: string, patch: Partial<Settings>) {
         primary: next.primary,
         background: next.background,
         archiveDays: next.archiveDays,
+        layout: next.layout,
+        hiddenCards: JSON.stringify(next.hiddenCards || []),
         updatedAt: new Date(),
       },
     });
@@ -114,7 +120,13 @@ export async function setWelcomeState(userId: string, welcomed: boolean) {
   const settings = await getSettings(userId);
   await db
     .insert(dashboardSettings)
-    .values({ userId, ...settings, welcomed, updatedAt: new Date() })
+    .values({ 
+      userId, 
+      ...settings, 
+      hiddenCards: JSON.stringify(settings.hiddenCards || []),
+      welcomed, 
+      updatedAt: new Date() 
+    })
     .onConflictDoUpdate({
       target: dashboardSettings.userId,
       set: { welcomed, updatedAt: new Date() },

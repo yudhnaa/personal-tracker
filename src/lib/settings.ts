@@ -11,6 +11,8 @@ export type Settings = {
   background: string;
   /** Hide done tasks completed more than N days ago; 0 = never hide. */
   archiveDays: number;
+  layout: Record<string, any> | null;
+  hiddenCards: string[];
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -19,6 +21,16 @@ export const DEFAULT_SETTINGS: Settings = {
   primary: "#f43f5e",
   background: "/bg-2.jpg",
   archiveDays: 90,
+  layout: {
+    lg: [
+      { i: "todo", x: 0, y: 0, w: 8, h: 18 },
+      { i: "pomodoro", x: 8, y: 0, w: 4, h: 12 },
+      { i: "notes", x: 8, y: 12, w: 4, h: 18 },
+      { i: "bookmarks", x: 0, y: 18, w: 4, h: 12 },
+      { i: "habits", x: 4, y: 18, w: 4, h: 12 },
+    ],
+  },
+  hiddenCards: [],
 };
 
 /** Choices for the auto-hide threshold (Settings). */

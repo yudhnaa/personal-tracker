@@ -64,6 +64,8 @@ export const dashboardSettings = pgTable("dashboard_settings", {
   background: text("background").notNull(),
   archiveDays: integer("archive_days").notNull(),
   welcomed: boolean("welcomed").notNull().default(false),
+  layout: jsonb("layout"),
+  hiddenCards: text("hidden_cards").notNull().default("[]"),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
