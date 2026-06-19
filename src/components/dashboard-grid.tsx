@@ -12,18 +12,25 @@ interface DashboardGridProps {
 
 const MIN_SIZES: Record<string, { minW: number; minH: number }> = {
 	todo: { minW: 4, minH: 12 },
-	pomodoro: { minW: 3, minH: 8 },
+	pomodoro: { minW: 3, minH: 11 },
 	notes: { minW: 3, minH: 10 },
 	bookmarks: { minW: 3, minH: 8 },
-	habits: { minW: 4, minH: 8 },
+	habits: { minW: 3, minH: 8 },
 };
 
-export function DashboardGrid({ activeLayout, handleLayoutChange, editMode, children }: DashboardGridProps) {
+export function DashboardGrid({
+	activeLayout,
+	handleLayoutChange,
+	editMode,
+	children,
+}: DashboardGridProps) {
 	const { width, containerRef, mounted } = useContainerWidth();
 
-	const layoutItems = Array.isArray(activeLayout?.lg) 
-		? activeLayout.lg 
-		: Array.isArray(activeLayout) ? activeLayout : [];
+	const layoutItems = Array.isArray(activeLayout?.lg)
+		? activeLayout.lg
+		: Array.isArray(activeLayout)
+			? activeLayout
+			: [];
 
 	const safeLayout = layoutItems.map((item: any) => ({
 		...item,
@@ -31,14 +38,23 @@ export function DashboardGrid({ activeLayout, handleLayoutChange, editMode, chil
 	}));
 
 	return (
-		<div className="h-full w-full" ref={containerRef}>
+		<div
+			className="h-full w-full"
+			ref={containerRef}
+		>
 			{mounted && (
 				<GridLayout
 					className="layout"
 					layout={safeLayout}
 					width={width}
-					gridConfig={{ cols: 12, rowHeight: 20, margin: [8, 8] as [number, number] }}
-					onLayoutChange={(newLayout: Layout) => handleLayoutChange(null, { lg: newLayout })}
+					gridConfig={{
+						cols: 12,
+						rowHeight: 20,
+						margin: [8, 8] as [number, number],
+					}}
+					onLayoutChange={(newLayout: Layout) =>
+						handleLayoutChange(null, { lg: newLayout })
+					}
 					dragConfig={{ enabled: editMode, handle: ".drag-handle" }}
 					resizeConfig={{ enabled: editMode }}
 				>

@@ -36,8 +36,7 @@ export function AccountPage({
 		await authClient.signOut();
 		localStorage.clear();
 		sessionStorage.clear();
-		router.push("/login");
-		router.refresh();
+		window.location.href = "/login";
 	}
 
 	return (

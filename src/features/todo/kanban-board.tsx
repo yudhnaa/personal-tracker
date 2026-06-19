@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
@@ -182,9 +183,14 @@ export function KanbanBoard({
           />
         ))}
       </div>
-      <DragOverlay dropAnimation={{ duration: 180 }}>
-        {activeTask ? <TaskCardBody task={activeTask} overlay /> : null}
-      </DragOverlay>
+      {typeof document !== "undefined"
+        ? createPortal(
+            <DragOverlay dropAnimation={{ duration: 180 }}>
+              {activeTask ? <TaskCardBody task={activeTask} overlay /> : null}
+            </DragOverlay>,
+            document.body,
+          )
+        : null}
     </DndContext>
   );
 }
