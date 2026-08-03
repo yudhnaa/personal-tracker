@@ -23,7 +23,7 @@ type CalendarViewProps = {
 	onOpenTask: (task: Task) => void;
 	onOpenEvent: (event: GoogleCalendarEvent) => void;
 	onCreateOn: (dateIso: string) => void;
-	onConvertEvent?: (event: GoogleCalendarEvent) => void;
+	onConvertEvent?: (event: GoogleCalendarEvent) => void | Promise<void>;
 };
 
 export function CalendarView({
@@ -41,6 +41,7 @@ export function CalendarView({
 	const locale = useLocale();
 	const t = messages[locale].features.todo;
 	const [dayView, setDayView] = useState<string | null>(null);
+	const [convertingDay, setConvertingDay] = useState<string | null>(null);
 
 	function getSpanDates(
 		startStr: string,
@@ -86,16 +87,36 @@ export function CalendarView({
 	}, [tasks]);
 
 	const linkedEventIds = useMemo(() => {
-		return new Set(tasks.map((t) => t.googleEventId).filter(Boolean));
+		const keys = new Set<string>();
+		for (const task of tasks) {
+			if (!task.googleCalendarId || !task.googleEventId) continue;
+			const calendarIds = new Set([task.googleCalendarId]);
+			if (task.googleCalendarId.includes("@")) calendarIds.add("primary");
+			for (const calendarId of calendarIds) {
+				if (task.googleCalendarAccountId) {
+					keys.add(eventKey(task.googleCalendarAccountId, calendarId, task.googleEventId));
+				}
+				if (task.googleCalendarConnectionId) {
+					keys.add(eventKey(task.googleCalendarConnectionId, calendarId, task.googleEventId));
+				}
+			}
+		}
+		return keys;
 	}, [tasks]);
 
 	const eventsByDate = useMemo(() => {
 		const map = new Map<string, GoogleCalendarEvent[]>();
 		for (const event of googleCalendar.events) {
-			if (linkedEventIds.has(event.id)) continue;
+			if (
+				linkedEventIds.has(eventKey(event.googleAccountId, event.calendarId, event.id)) ||
+				linkedEventIds.has(eventKey(event.connectionId, event.calendarId, event.id))
+			) {
+				continue;
+			}
 
 			const isPending = tasks.some(
 				(t) =>
+					(t.googleCalendarAccountId ?? t.googleCalendarConnectionId) === event.googleAccountId &&
 					t.googleCalendarId === event.calendarId &&
 					!t.googleEventId &&
 					t.title === event.title,
@@ -147,8 +168,17 @@ export function CalendarView({
 	);
 
 	const googleConnected =
-		googleCalendar.connection.connected &&
-		!googleCalendar.connection.reconnectRequired;
+		googleCalendar.connection.connected;
+
+	async function convertAllDayEvents() {
+		if (!dayView || !onConvertEvent || dayEventsInView.length === 0 || convertingDay) return;
+		setConvertingDay(dayView);
+		try {
+			await Promise.all(dayEventsInView.map((event) => onConvertEvent(event)));
+		} finally {
+			setConvertingDay(null);
+		}
+	}
 
 	return (
 		<>
@@ -249,7 +279,7 @@ export function CalendarView({
 											</span>
 										) : (
 											<span
-												key={`event-${item.event.calendarId}-${item.event.id}`}
+												key={`event-${item.event.connectionId}-${item.event.calendarId}-${item.event.id}`}
 												onClick={(e) => {
 													e.stopPropagation();
 													onOpenEvent(item.event);
@@ -281,7 +311,37 @@ export function CalendarView({
 
 			<Modal
 				open={dayView !== null}
-				title={dayView ? formatFullDate(dayView, locale) : ""}
+				title={
+					<div className="flex min-w-0 items-center gap-2">
+						<h3 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">
+							{dayView ? formatFullDate(dayView, locale) : ""}
+						</h3>
+						{onConvertEvent && dayEventsInView.length > 0 ? (
+							<button
+								type="button"
+								onClick={() => void convertAllDayEvents()}
+								disabled={convertingDay === dayView}
+								className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink disabled:cursor-wait disabled:opacity-60"
+							>
+								<ListChecks size={14} />
+								{t.calendar.convertAllEventsToTasks}
+							</button>
+						) : null}
+					</div>
+				}
+				headerAction={
+					<IconButton
+						aria-label={t.calendar.addTaskForDay}
+						title={t.calendar.addTaskForDay}
+						onClick={() => {
+							if (dayView) onCreateOn(dayView);
+							setDayView(null);
+						}}
+						className="bg-btn text-btn-ink hover:opacity-90"
+					>
+						<Plus size={17} />
+					</IconButton>
+				}
 				onClose={() => setDayView(null)}
 			>
 				<div className="space-y-3">
@@ -303,11 +363,12 @@ export function CalendarView({
 												<p className="truncate text-sm font-medium text-ink">
 													{item.task.title}
 												</p>
-												<span className="shrink-0 rounded-[0.25rem] bg-surface-muted px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-ink-soft uppercase">
-													{item.task.source === "google"
-														? t.calendar.linkedTask
-														: t.calendar.localTask}
-												</span>
+												{item.task.source === "google" ? (
+													<CalendarClock
+														size={13}
+														className="shrink-0 text-ink-faint"
+													/>
+												) : null}
 											</div>
 											{item.task.description ? (
 												<p className="mt-0.5 truncate text-xs text-ink-faint">
@@ -326,7 +387,7 @@ export function CalendarView({
 									</button>
 								) : (
 									<div
-										key={`event-${item.event.calendarId}-${item.event.id}`}
+										key={`event-${item.event.connectionId}-${item.event.calendarId}-${item.event.id}`}
 										className="group flex w-full items-start gap-3 rounded-[var(--radius-inner)] bg-violet-50 px-3 py-2.5 text-left transition-colors hover:bg-violet-100 dark:bg-violet-500/15 dark:hover:bg-violet-500/20"
 									>
 										<button
@@ -379,18 +440,6 @@ export function CalendarView({
 							{t.calendar.empty}
 						</p>
 					)}
-
-					<button
-						type="button"
-						onClick={() => {
-							if (dayView) onCreateOn(dayView);
-							setDayView(null);
-						}}
-						className="flex w-full items-center justify-center gap-2 rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
-					>
-						<Plus size={16} />
-						{t.calendar.addTaskForDay}
-					</button>
 				</div>
 			</Modal>
 		</>
@@ -453,6 +502,10 @@ function buildDayItems(
 
 function eventDate(event: GoogleCalendarEvent) {
 	return event.start.slice(0, 10);
+}
+
+function eventKey(googleAccountId: string, calendarId: string, eventId: string) {
+	return `${googleAccountId}:${calendarId}:${eventId}`;
 }
 
 function eventSortKey(event: GoogleCalendarEvent) {

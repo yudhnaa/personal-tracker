@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/db";
 import { googleCalendarConnections, googleCalendarEventCache, todos } from "@/db/schema";
@@ -17,15 +17,25 @@ export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 
-export type GoogleCalendarConnectionStatus = {
+export type GoogleCalendarConnection = {
+  id: string;
+  googleAccountId: string;
   connected: boolean;
-  googleEmail: string | null;
+  googleEmail: string;
   selectedCalendarIds: string[];
   syncIntervalMinutes: number;
   reconnectRequired: boolean;
 };
 
+export type GoogleCalendarConnectionStatus = {
+  connected: boolean;
+  connections: GoogleCalendarConnection[];
+};
+
 export type GoogleCalendarListItem = {
+  connectionId: string;
+  googleAccountId: string;
+  googleEmail: string;
   id: string;
   summary: string;
   primary: boolean;
@@ -35,6 +45,8 @@ export type GoogleCalendarListItem = {
 };
 
 export type GoogleCalendarEvent = {
+  connectionId: string;
+  googleAccountId: string;
   id: string;
   calendarId: string;
   title: string;
@@ -49,6 +61,7 @@ export type GoogleCalendarEvent = {
 };
 
 export type GoogleCalendarEventDraft = {
+  connectionId?: string;
   calendarId?: string;
   title?: string;
   description?: string;
@@ -69,6 +82,7 @@ type TokenResponse = {
 };
 
 type GoogleUserInfo = {
+  id?: string;
   email?: string;
 };
 
@@ -196,37 +210,47 @@ export async function buildGoogleAuthorizationRedirect(request: NextRequest, use
 export async function storeGoogleCalendarConnection(request: NextRequest, userId: string, code: string) {
   const config = getGoogleCalendarConfig(request.nextUrl);
   const tokenResponse = await exchangeAuthorizationCode(code, config);
-  if (!tokenResponse.access_token || !tokenResponse.refresh_token) {
-    throw new Error(tokenResponse.error_description ?? tokenResponse.error ?? "Google did not return OAuth tokens");
+  if (!tokenResponse.access_token) {
+    throw new Error(tokenResponse.error_description ?? tokenResponse.error ?? "Google did not return an access token");
   }
 
-  const googleEmail = await fetchGoogleEmail(tokenResponse.access_token);
+  const profile = await fetchGoogleProfile(tokenResponse.access_token);
+  const googleEmail = profile.email ?? "Google Calendar";
+  const googleAccountId = profile.id ?? googleEmail;
+  const existing = await adoptLegacyGoogleCalendarAccountIdentity(userId, googleAccountId, googleEmail);
+  if (!tokenResponse.refresh_token && !existing?.refreshToken) {
+    throw new Error(tokenResponse.error_description ?? tokenResponse.error ?? "Google did not return a refresh token");
+  }
+
   const expiresInSeconds = tokenResponse.expires_in ?? 3600;
-  const selectedCalendarIds = JSON.stringify(["primary"]);
+  const selectedCalendarIds = existing?.selectedCalendarIds ?? JSON.stringify([defaultSelectedGoogleCalendarId(googleEmail)]);
   const tokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
   const now = new Date();
+  const id = existing?.id ?? createId();
 
   await db
     .insert(googleCalendarConnections)
     .values({
+      id,
       userId,
+      googleAccountId,
       googleEmail,
       accessToken: encryptToken(tokenResponse.access_token),
-      refreshToken: encryptToken(tokenResponse.refresh_token),
+      refreshToken: tokenResponse.refresh_token ? encryptToken(tokenResponse.refresh_token) : existing!.refreshToken,
       tokenExpiresAt,
       scope: tokenResponse.scope ?? config.scopes.join(" "),
       selectedCalendarIds,
-      syncIntervalMinutes: 5,
+      syncIntervalMinutes: existing?.syncIntervalMinutes ?? 5,
       reconnectRequired: false,
-      connectedAt: now,
+      connectedAt: existing?.connectedAt ?? now,
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: googleCalendarConnections.userId,
+      target: [googleCalendarConnections.userId, googleCalendarConnections.googleAccountId],
       set: {
         googleEmail,
         accessToken: encryptToken(tokenResponse.access_token),
-        refreshToken: encryptToken(tokenResponse.refresh_token),
+        refreshToken: tokenResponse.refresh_token ? encryptToken(tokenResponse.refresh_token) : existing!.refreshToken,
         tokenExpiresAt,
         scope: tokenResponse.scope ?? config.scopes.join(" "),
         selectedCalendarIds,
@@ -234,190 +258,258 @@ export async function storeGoogleCalendarConnection(request: NextRequest, userId
         updatedAt: now,
       },
     });
+  await adoptLegacyGoogleLinkedRows(userId, id, googleAccountId, googleEmail);
 
   return getGoogleCalendarConnectionStatus(userId);
 }
 
 export async function getGoogleCalendarConnectionStatus(userId: string): Promise<GoogleCalendarConnectionStatus> {
-  const [connection] = await db
+  const connections = await db
     .select({
+      id: googleCalendarConnections.id,
+      googleAccountId: googleCalendarConnections.googleAccountId,
       googleEmail: googleCalendarConnections.googleEmail,
       selectedCalendarIds: googleCalendarConnections.selectedCalendarIds,
       syncIntervalMinutes: googleCalendarConnections.syncIntervalMinutes,
       reconnectRequired: googleCalendarConnections.reconnectRequired,
     })
     .from(googleCalendarConnections)
-    .where(eq(googleCalendarConnections.userId, userId))
-    .limit(1);
+    .where(eq(googleCalendarConnections.userId, userId));
 
-  if (!connection) {
-    return {
-      connected: false,
-      googleEmail: null,
-      selectedCalendarIds: [],
-      syncIntervalMinutes: 5,
-      reconnectRequired: false,
-    };
-  }
-
-  return {
+  const mapped = connections.map((connection) => ({
+    id: connection.id,
+    googleAccountId: connection.googleAccountId,
     connected: !connection.reconnectRequired,
     googleEmail: connection.googleEmail,
     selectedCalendarIds: parseSelectedCalendarIds(connection.selectedCalendarIds),
     syncIntervalMinutes: connection.syncIntervalMinutes,
     reconnectRequired: connection.reconnectRequired,
+  }));
+
+  return {
+    connected: mapped.some((connection) => connection.connected),
+    connections: mapped,
   };
 }
 
-export async function disconnectGoogleCalendar(userId: string) {
-  await db.delete(googleCalendarEventCache).where(eq(googleCalendarEventCache.userId, userId));
-  await db.delete(googleCalendarConnections).where(eq(googleCalendarConnections.userId, userId));
+export async function disconnectGoogleCalendar(userId: string, connectionId?: string) {
+  if (connectionId) {
+    await db
+      .delete(googleCalendarEventCache)
+      .where(and(eq(googleCalendarEventCache.userId, userId), eq(googleCalendarEventCache.connectionId, connectionId)));
+    await db
+      .delete(googleCalendarConnections)
+      .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, connectionId)));
+  } else {
+    await db.delete(googleCalendarEventCache).where(eq(googleCalendarEventCache.userId, userId));
+    await db.delete(googleCalendarConnections).where(eq(googleCalendarConnections.userId, userId));
+  }
   return getGoogleCalendarConnectionStatus(userId);
 }
 
-export async function listGoogleCalendars(userId: string): Promise<GoogleCalendarListItem[]> {
-  const selectedCalendarIds = await getSelectedCalendarIds(userId);
-  const response = await googleCalendarFetch<CalendarListResponse>(userId, "/users/me/calendarList");
-  return (response.items ?? [])
-    .filter((calendar) => Boolean(calendar.id))
-    .map((calendar) => ({
-      id: calendar.id!,
-      summary: calendar.summary ?? calendar.id!,
-      primary: calendar.primary ?? false,
-      backgroundColor: calendar.backgroundColor ?? null,
-      accessRole: calendar.accessRole ?? "reader",
-      selected: selectedCalendarIds.includes(calendar.id!),
-    }));
+export async function listGoogleCalendars(userId: string, connectionId?: string): Promise<GoogleCalendarListItem[]> {
+  const connections = connectionId
+    ? [await ensureGoogleCalendarConnection(userId, connectionId)]
+    : await getHealthyGoogleCalendarConnections(userId);
+  const calendars: GoogleCalendarListItem[] = [];
+  for (const connection of connections) {
+    const selectedCalendarIds = new Set(
+      parseSelectedCalendarIds(connection.selectedCalendarIds).flatMap((calendarId) =>
+        googleCalendarIdAliases(connection, calendarId),
+      ),
+    );
+    const response = await googleCalendarFetch<CalendarListResponse>(connection, "/users/me/calendarList");
+    calendars.push(
+      ...(response.items ?? [])
+        .filter((calendar) => Boolean(calendar.id))
+        .map((calendar) => ({
+          connectionId: connection.id,
+          googleAccountId: connection.googleAccountId,
+          googleEmail: connection.googleEmail,
+          id: calendar.id!,
+          summary: calendar.summary ?? calendar.id!,
+          primary: calendar.primary ?? false,
+          backgroundColor: calendar.backgroundColor ?? null,
+          accessRole: calendar.accessRole ?? "reader",
+          selected: selectedCalendarIds.has(calendar.id!),
+        })),
+    );
+  }
+  return calendars;
 }
 
-export async function updateSelectedGoogleCalendars(userId: string, selectedCalendarIds: string[]) {
-  await ensureGoogleCalendarConnection(userId);
+export async function updateSelectedGoogleCalendars(
+  userId: string,
+  connectionId: string,
+  selectedCalendarIds: string[],
+) {
+  await ensureGoogleCalendarConnection(userId, connectionId);
   await db
     .update(googleCalendarConnections)
     .set({
       selectedCalendarIds: JSON.stringify(selectedCalendarIds),
       updatedAt: new Date(),
     })
-    .where(eq(googleCalendarConnections.userId, userId));
+    .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, connectionId)));
   return listGoogleCalendars(userId);
 }
 
 export async function syncGoogleCalendarEvents(userId: string, range: { start: string; end: string }) {
-  const connection = await ensureGoogleCalendarConnection(userId);
-  const calendarIds = parseSelectedCalendarIds(connection.selectedCalendarIds);
-  if (!calendarIds.length) return [];
-
+  const connections = await getHealthyGoogleCalendarConnections(userId);
   const events: GoogleCalendarEvent[] = [];
-  for (const calendarId of calendarIds) {
-    const params = new URLSearchParams({
-      singleEvents: "true",
-      orderBy: "startTime",
-      showDeleted: "true",
-      timeMin: toGoogleRangeStart(range.start),
-      timeMax: toGoogleRangeEnd(range.end),
-    });
-    const response = await googleCalendarFetch<EventsResponse>(
-      userId,
-      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
-    );
 
-    for (const apiEvent of response.items ?? []) {
-      if (apiEvent.status === "cancelled" && apiEvent.id) {
-        await deleteCachedGoogleCalendarEvent(userId, calendarId, apiEvent.id);
-        await db.delete(todos).where(
-          and(
-            eq(todos.userId, userId),
-            eq(todos.googleCalendarId, calendarId),
-            eq(todos.googleEventId, apiEvent.id)
-          )
+  for (const connection of connections) {
+    const calendarIds = parseSelectedCalendarIds(connection.selectedCalendarIds);
+    if (!calendarIds.length) continue;
+
+    try {
+      for (const calendarId of calendarIds) {
+        const params = new URLSearchParams({
+          singleEvents: "true",
+          orderBy: "startTime",
+          showDeleted: "true",
+          timeMin: toGoogleRangeStart(range.start),
+          timeMax: toGoogleRangeEnd(range.end),
+        });
+        const response = await googleCalendarFetch<EventsResponse>(
+          connection,
+          `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
         );
-        continue;
+
+        for (const apiEvent of response.items ?? []) {
+          const calendarAliases = googleCalendarIdAliases(connection, calendarId);
+          if (apiEvent.status === "cancelled" && apiEvent.id) {
+            await deleteCachedGoogleCalendarEvent(
+              userId,
+              connection.googleAccountId,
+              calendarAliases,
+              apiEvent.id,
+            );
+            await db.delete(todos).where(
+              and(
+                eq(todos.userId, userId),
+                calendarAliases.length === 1
+                  ? eq(todos.googleCalendarId, calendarAliases[0])
+                  : or(...calendarAliases.map((alias) => eq(todos.googleCalendarId, alias))),
+                eq(todos.googleEventId, apiEvent.id),
+                or(
+                  eq(todos.googleCalendarAccountId, connection.googleAccountId),
+                  eq(todos.googleCalendarAccountId, connection.googleEmail),
+                  isNull(todos.googleCalendarAccountId),
+                ),
+              ),
+            );
+            continue;
+          }
+
+          const event = normalizeGoogleEvent(connection, calendarId, apiEvent);
+          if (!event) continue;
+
+          const localTask = await findLinkedGoogleTask(userId, connection, calendarId, event.id);
+
+          if (localTask && localTask.syncStatus === "error") {
+            const draft: GoogleCalendarEventDraft = {
+              connectionId: connection.id,
+              calendarId,
+              title: localTask.title,
+              description: localTask.description || undefined,
+              location: localTask.location || undefined,
+              start: localTask.startAt || localTask.dueDate || undefined,
+              end: localTask.endAt || undefined,
+              allDay: localTask.allDay,
+            };
+            try {
+              const updatedEvent = await updateGoogleCalendarEvent(userId, connection.id, calendarId, event.id, draft);
+              await db
+                .update(todos)
+                .set({
+                  syncStatus: "synced",
+                  googleEventPayload: { etag: updatedEvent.etag, updated: updatedEvent.updated },
+                  googleCalendarConnectionId: connection.id,
+                  googleCalendarAccountId: connection.googleAccountId,
+                  googleCalendarId: updatedEvent.calendarId,
+                })
+                .where(eq(todos.id, localTask.id));
+              await upsertCachedEvent(userId, updatedEvent, { localUpdatedAt: new Date(), pendingLocalUpdate: false });
+            } catch {
+              await reconcileFetchedEvent(userId, event);
+            }
+            continue;
+          }
+
+          const reconciled = await reconcileFetchedEvent(userId, event);
+          if (localTask) {
+            await db
+              .update(todos)
+              .set({
+                title: reconciled.title,
+                description: reconciled.description,
+                location: reconciled.location,
+                startAt: reconciled.start,
+                dueDate: reconciled.allDay ? reconciled.start.slice(0, 10) : reconciled.start,
+                endAt: reconciled.end || null,
+                allDay: reconciled.allDay,
+                googleCalendarConnectionId: connection.id,
+                googleCalendarAccountId: connection.googleAccountId,
+                googleCalendarId: reconciled.calendarId,
+                googleEventPayload: { etag: reconciled.etag, updated: reconciled.updated },
+                syncStatus: "synced",
+              })
+              .where(eq(todos.id, localTask.id));
+            continue;
+          }
+          upsertVisibleGoogleEvent(events, reconciled);
+        }
       }
 
-      const event = normalizeGoogleEvent(calendarId, apiEvent);
-      if (!event) continue;
-
-      const [localTask] = await db
-        .select()
-        .from(todos)
-        .where(
-          and(
-            eq(todos.userId, userId),
-            eq(todos.googleCalendarId, calendarId),
-            eq(todos.googleEventId, event.id)
-          )
-        )
-        .limit(1);
-
-      if (localTask && localTask.syncStatus === "error") {
-        const draft: GoogleCalendarEventDraft = {
-          title: localTask.title,
-          description: localTask.description || undefined,
-          location: localTask.location || undefined,
-          start: localTask.startAt || localTask.dueDate || undefined,
-          end: localTask.endAt || undefined,
-          allDay: localTask.allDay,
-        };
-        try {
-          const updatedEvent = await updateGoogleCalendarEvent(userId, calendarId, event.id, draft);
-          await db
-            .update(todos)
-            .set({
-              syncStatus: "synced",
-              googleEventPayload: { etag: updatedEvent.etag, updated: updatedEvent.updated },
-            })
-            .where(eq(todos.id, localTask.id));
-          events.push(await reconcileFetchedEvent(userId, updatedEvent));
-        } catch (e) {
-          events.push(await reconcileFetchedEvent(userId, event));
-        }
-      } else {
-        const reconciled = await reconcileFetchedEvent(userId, event);
-        if (localTask) {
-          await db
-            .update(todos)
-            .set({
-              title: reconciled.title,
-              description: reconciled.description,
-              location: reconciled.location,
-              startAt: reconciled.start,
-              dueDate: reconciled.allDay ? reconciled.start.slice(0, 10) : reconciled.start,
-              endAt: reconciled.end || null,
-              allDay: reconciled.allDay,
-              googleEventPayload: { etag: reconciled.etag, updated: reconciled.updated },
-              syncStatus: "synced",
-            })
-            .where(eq(todos.id, localTask.id));
-        }
-        events.push(reconciled);
-      }
+      await db
+        .update(googleCalendarConnections)
+        .set({ lastSyncedAt: new Date(), reconnectRequired: false, updatedAt: new Date() })
+        .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, connection.id)));
+    } catch (error) {
+      if (error instanceof GoogleCalendarApiError && error.reconnectRequired) continue;
+      console.error("[personal-tracker] Google Calendar sync failed", error);
     }
   }
-
-  await db
-    .update(googleCalendarConnections)
-    .set({ lastSyncedAt: new Date(), reconnectRequired: false, updatedAt: new Date() })
-    .where(eq(googleCalendarConnections.userId, userId));
 
   return events.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+function upsertVisibleGoogleEvent(events: GoogleCalendarEvent[], event: GoogleCalendarEvent) {
+  const existingIndex = events.findIndex(
+    (item) =>
+      item.googleAccountId === event.googleAccountId &&
+      item.calendarId === event.calendarId &&
+      item.id === event.id,
+  );
+  if (existingIndex === -1) {
+    events.push(event);
+  } else {
+    events[existingIndex] = event;
+  }
+}
+
 export async function createGoogleCalendarEvent(userId: string, draft: GoogleCalendarEventDraft) {
   const calendarId = draft.calendarId;
-  const selectedCalendarIds = await getSelectedCalendarIds(userId);
-  if (!calendarId || !selectedCalendarIds.includes(calendarId)) {
+  const connectionId = draft.connectionId;
+  if (!connectionId || !calendarId) {
+    throw new GoogleCalendarApiError("Choose an enabled Google Calendar", 400);
+  }
+  const connection = await ensureGoogleCalendarConnection(userId, connectionId);
+  const selectedCalendarIds = parseSelectedCalendarIds(connection.selectedCalendarIds);
+  if (!selectedCalendarIds.includes(calendarId)) {
     throw new GoogleCalendarApiError("Choose an enabled Google Calendar", 400);
   }
 
   const response = await googleCalendarFetch<GoogleCalendarApiEvent>(
-    userId,
+    connection,
     `/calendars/${encodeURIComponent(calendarId)}/events`,
     {
       method: "POST",
       body: JSON.stringify(toGoogleEventPayload(draft)),
     },
   );
-  const event = normalizeGoogleEvent(calendarId, response);
+  const event = normalizeGoogleEvent(connection, calendarId, response);
   if (!event) throw new GoogleCalendarApiError("Google returned an invalid event", 502);
   await upsertCachedEvent(userId, event, { localUpdatedAt: new Date(), pendingLocalUpdate: false });
   return event;
@@ -425,39 +517,73 @@ export async function createGoogleCalendarEvent(userId: string, draft: GoogleCal
 
 export async function updateGoogleCalendarEvent(
   userId: string,
+  connectionId: string,
   calendarId: string,
   eventId: string,
   patch: GoogleCalendarEventDraft,
 ) {
+  const connection = await ensureGoogleCalendarConnection(userId, connectionId);
   const response = await googleCalendarFetch<GoogleCalendarApiEvent>(
-    userId,
+    connection,
     `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",
       body: JSON.stringify(toGoogleEventPayload(patch)),
     },
   );
-  const event = normalizeGoogleEvent(calendarId, response);
+  const event = normalizeGoogleEvent(connection, calendarId, response);
   if (!event) throw new GoogleCalendarApiError("Google returned an invalid event", 502);
   await upsertCachedEvent(userId, event, { localUpdatedAt: new Date(), pendingLocalUpdate: true });
   return event;
 }
 
-export async function deleteGoogleCalendarEvent(userId: string, calendarId: string, eventId: string) {
+export async function deleteGoogleCalendarEvent(
+  userId: string,
+  connectionId: string,
+  calendarId: string,
+  eventId: string,
+) {
+  const connection = await ensureGoogleCalendarConnection(userId, connectionId);
   await googleCalendarFetch<void>(
-    userId,
+    connection,
     `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     { method: "DELETE" },
   );
-  await deleteCachedGoogleCalendarEvent(userId, calendarId, eventId);
+  await deleteCachedGoogleCalendarEvent(
+    userId,
+    connection.googleAccountId,
+    googleCalendarIdAliases(connection, calendarId),
+    eventId,
+  );
   return { ok: true };
 }
 
-export async function markGoogleCalendarReconnectRequired(userId: string) {
+export async function deleteGoogleCalendarEventByAccount(
+  userId: string,
+  googleAccountIdentity: string,
+  calendarId: string,
+  eventId: string,
+) {
+  const connection = await ensureGoogleCalendarConnectionByAccount(userId, googleAccountIdentity);
+  await googleCalendarFetch<void>(
+    connection,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    { method: "DELETE" },
+  );
+  await deleteCachedGoogleCalendarEvent(
+    userId,
+    connection.googleAccountId,
+    googleCalendarIdAliases(connection, calendarId),
+    eventId,
+  );
+  return { ok: true };
+}
+
+export async function markGoogleCalendarReconnectRequired(userId: string, connectionId: string) {
   await db
     .update(googleCalendarConnections)
     .set({ reconnectRequired: true, updatedAt: new Date() })
-    .where(eq(googleCalendarConnections.userId, userId));
+    .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, connectionId)));
 }
 
 export function parseSelectedCalendarIds(value: string | null | undefined) {
@@ -470,6 +596,59 @@ export function parseSelectedCalendarIds(value: string | null | undefined) {
   }
 }
 
+function mergeGoogleCalendarConnectionSettings(
+  candidates: CalendarConnectionRow[],
+  target: CalendarConnectionRow,
+  googleEmail: string,
+) {
+  const selectedCalendarIds = Array.from(
+    new Set(
+      candidates.flatMap((connection) =>
+        parseSelectedCalendarIds(connection.selectedCalendarIds).map((calendarId) =>
+          canonicalGoogleCalendarId({ googleEmail }, calendarId),
+        ),
+      ),
+    ),
+  );
+  const syncIntervalMinutes = target.syncIntervalMinutes !== 5
+    ? target.syncIntervalMinutes
+    : candidates.find((connection) => connection.syncIntervalMinutes !== 5)?.syncIntervalMinutes ?? target.syncIntervalMinutes;
+
+  return {
+    selectedCalendarIds: JSON.stringify(selectedCalendarIds.length > 0 ? selectedCalendarIds : ["primary"]),
+    syncIntervalMinutes,
+  };
+}
+
+function hasGoogleEmail(googleEmail: string | null | undefined) {
+  return Boolean(googleEmail && googleEmail !== "Google Calendar");
+}
+
+function defaultSelectedGoogleCalendarId(googleEmail: string) {
+  return hasGoogleEmail(googleEmail) ? googleEmail : "primary";
+}
+
+function canonicalGoogleCalendarId(
+  connection: Pick<CalendarConnectionRow, "googleEmail">,
+  calendarId: string,
+) {
+  return calendarId === "primary" && hasGoogleEmail(connection.googleEmail)
+    ? connection.googleEmail
+    : calendarId;
+}
+
+function googleCalendarIdAliases(
+  connection: Pick<CalendarConnectionRow, "googleEmail">,
+  calendarId: string,
+) {
+  const aliases = [calendarId];
+  if (hasGoogleEmail(connection.googleEmail)) {
+    if (calendarId === "primary") aliases.push(connection.googleEmail);
+    if (calendarId === connection.googleEmail) aliases.push("primary");
+  }
+  return Array.from(new Set(aliases));
+}
+
 export function encryptedTokenForTestOnly(value: string) {
   return encryptToken(value);
 }
@@ -478,23 +657,221 @@ export function decryptGoogleCalendarToken(value: string) {
   return decryptToken(value);
 }
 
-export async function deleteCachedGoogleCalendarEvent(userId: string, calendarId: string, googleEventId: string) {
+export async function deleteCachedGoogleCalendarEvent(
+  userId: string,
+  googleAccountId: string,
+  calendarId: string | string[],
+  googleEventId: string,
+) {
+  const calendarIds = Array.isArray(calendarId) ? calendarId : [calendarId];
   await db
     .delete(googleCalendarEventCache)
     .where(
       and(
         eq(googleCalendarEventCache.userId, userId),
-        eq(googleCalendarEventCache.calendarId, calendarId),
+        eq(googleCalendarEventCache.googleAccountId, googleAccountId),
+        calendarIds.length === 1
+          ? eq(googleCalendarEventCache.calendarId, calendarIds[0])
+          : or(...calendarIds.map((id) => eq(googleCalendarEventCache.calendarId, id))),
         eq(googleCalendarEventCache.googleEventId, googleEventId),
       ),
     );
 }
 
-async function ensureGoogleCalendarConnection(userId: string) {
+async function getHealthyGoogleCalendarConnections(userId: string) {
+  return db
+    .select()
+    .from(googleCalendarConnections)
+    .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.reconnectRequired, false)));
+}
+
+async function adoptLegacyGoogleCalendarAccountIdentity(userId: string, googleAccountId: string, googleEmail: string) {
+  return db.transaction(async (tx) => {
+    const identityFilters = [eq(googleCalendarConnections.googleAccountId, googleAccountId)];
+    if (googleEmail && googleEmail !== "Google Calendar" && googleEmail !== googleAccountId) {
+      identityFilters.push(eq(googleCalendarConnections.googleAccountId, googleEmail));
+      identityFilters.push(eq(googleCalendarConnections.googleEmail, googleEmail));
+    }
+
+    const candidates = await tx
+      .select()
+      .from(googleCalendarConnections)
+      .where(and(eq(googleCalendarConnections.userId, userId), or(...identityFilters)))
+      .orderBy(asc(googleCalendarConnections.connectedAt));
+    const canonical = candidates.find((connection) => connection.googleAccountId === googleAccountId);
+    const target = canonical ?? candidates[0] ?? null;
+    if (!target) return null;
+    const mergedSettings = mergeGoogleCalendarConnectionSettings(candidates, target, googleEmail);
+
+    for (const legacy of candidates) {
+      if (legacy.id === target.id) continue;
+      await moveGoogleLinkedRows(tx, userId, legacy.id, legacy.googleAccountId, target.id, googleAccountId);
+      await tx
+        .delete(googleCalendarConnections)
+        .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, legacy.id)));
+    }
+
+    const needsIdentityUpdate = target.googleAccountId !== googleAccountId || target.googleEmail !== googleEmail;
+    const needsSettingsUpdate =
+      target.selectedCalendarIds !== mergedSettings.selectedCalendarIds ||
+      target.syncIntervalMinutes !== mergedSettings.syncIntervalMinutes;
+
+    if (needsIdentityUpdate || needsSettingsUpdate) {
+      if (needsIdentityUpdate) {
+        await moveGoogleLinkedRows(tx, userId, target.id, target.googleAccountId, target.id, googleAccountId);
+      }
+      const [updated] = await tx
+        .update(googleCalendarConnections)
+        .set({
+          googleAccountId,
+          googleEmail,
+          selectedCalendarIds: mergedSettings.selectedCalendarIds,
+          syncIntervalMinutes: mergedSettings.syncIntervalMinutes,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, target.id)))
+        .returning();
+      return updated ?? target;
+    }
+
+    return target;
+  });
+}
+
+async function moveGoogleLinkedRows(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  fromConnectionId: string,
+  fromAccountId: string,
+  toConnectionId: string,
+  toAccountId: string,
+) {
+  await tx.execute(sql`
+    DELETE FROM "todos" AS legacy
+    WHERE legacy."user_id" = ${userId}
+      AND legacy."google_calendar_id" IS NOT NULL
+      AND legacy."google_event_id" IS NOT NULL
+      AND (
+        legacy."google_calendar_connection_id" = ${fromConnectionId}
+        OR legacy."google_calendar_account_id" = ${fromAccountId}
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM "todos" AS canonical
+        WHERE canonical."user_id" = legacy."user_id"
+          AND canonical."google_calendar_account_id" = ${toAccountId}
+          AND canonical."google_calendar_id" = legacy."google_calendar_id"
+          AND canonical."google_event_id" = legacy."google_event_id"
+          AND canonical."id" <> legacy."id"
+      )
+  `);
+  await tx.execute(sql`
+    UPDATE "todos"
+    SET
+      "google_calendar_connection_id" = ${toConnectionId},
+      "google_calendar_account_id" = ${toAccountId}
+    WHERE "user_id" = ${userId}
+      AND (
+        "google_calendar_connection_id" = ${fromConnectionId}
+        OR "google_calendar_account_id" = ${fromAccountId}
+      )
+  `);
+  await tx.execute(sql`
+    DELETE FROM "google_calendar_event_cache" AS legacy
+    WHERE legacy."user_id" = ${userId}
+      AND (
+        legacy."google_calendar_connection_id" = ${fromConnectionId}
+        OR legacy."google_account_id" = ${fromAccountId}
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM "google_calendar_event_cache" AS canonical
+        WHERE canonical."user_id" = legacy."user_id"
+          AND canonical."google_account_id" = ${toAccountId}
+          AND canonical."calendar_id" = legacy."calendar_id"
+          AND canonical."google_event_id" = legacy."google_event_id"
+          AND canonical."id" <> legacy."id"
+      )
+  `);
+  await tx.execute(sql`
+    UPDATE "google_calendar_event_cache"
+    SET
+      "google_calendar_connection_id" = ${toConnectionId},
+      "google_account_id" = ${toAccountId}
+    WHERE "user_id" = ${userId}
+      AND (
+        "google_calendar_connection_id" = ${fromConnectionId}
+        OR "google_account_id" = ${fromAccountId}
+      )
+  `);
+}
+
+async function adoptLegacyGoogleLinkedRows(
+  userId: string,
+  connectionId: string,
+  googleAccountId: string,
+  googleEmail: string,
+) {
+  if (!googleEmail || googleEmail === "Google Calendar" || googleEmail === googleAccountId) return;
+  await db.transaction(async (tx) => {
+    await moveGoogleLinkedRows(tx, userId, "", googleEmail, connectionId, googleAccountId);
+  });
+}
+
+async function findLinkedGoogleTask(
+  userId: string,
+  connection: CalendarConnectionRow,
+  calendarId: string,
+  googleEventId: string,
+) {
+  return db.transaction(async (tx) => {
+    const calendarAliases = googleCalendarIdAliases(connection, calendarId);
+    const accountFilter = or(
+      eq(todos.googleCalendarAccountId, connection.googleAccountId),
+      eq(todos.googleCalendarAccountId, connection.googleEmail),
+      isNull(todos.googleCalendarAccountId),
+    );
+    const matches = await tx
+      .select()
+      .from(todos)
+      .where(
+        and(
+          eq(todos.userId, userId),
+          calendarAliases.length === 1
+            ? eq(todos.googleCalendarId, calendarAliases[0])
+            : or(...calendarAliases.map((alias) => eq(todos.googleCalendarId, alias))),
+          eq(todos.googleEventId, googleEventId),
+          accountFilter,
+        ),
+      )
+      .orderBy(asc(todos.createdAt));
+    const canonical = matches[0];
+    if (!canonical) return null;
+
+    for (const duplicate of matches.slice(1)) {
+      await tx.delete(todos).where(and(eq(todos.userId, userId), eq(todos.id, duplicate.id)));
+    }
+
+    const [adopted] = await tx
+      .update(todos)
+      .set({
+        googleCalendarConnectionId: connection.id,
+        googleCalendarAccountId: connection.googleAccountId,
+        googleCalendarId: canonicalGoogleCalendarId(connection, calendarId),
+        source: "google",
+        syncStatus: canonical.syncStatus === "local_only" ? "synced" : canonical.syncStatus,
+      })
+      .where(and(eq(todos.userId, userId), eq(todos.id, canonical.id)))
+      .returning();
+    return adopted ?? canonical;
+  });
+}
+
+async function ensureGoogleCalendarConnection(userId: string, connectionId: string) {
   const [connection] = await db
     .select()
     .from(googleCalendarConnections)
-    .where(eq(googleCalendarConnections.userId, userId))
+    .where(and(eq(googleCalendarConnections.userId, userId), eq(googleCalendarConnections.id, connectionId)))
     .limit(1);
   if (!connection) {
     throw new GoogleCalendarApiError("Google Calendar is not connected", 404);
@@ -505,13 +882,32 @@ async function ensureGoogleCalendarConnection(userId: string) {
   return connection;
 }
 
-async function getSelectedCalendarIds(userId: string) {
-  const connection = await ensureGoogleCalendarConnection(userId);
-  return parseSelectedCalendarIds(connection.selectedCalendarIds);
+async function ensureGoogleCalendarConnectionByAccount(userId: string, googleAccountIdentity: string) {
+  const [connection] = await db
+    .select()
+    .from(googleCalendarConnections)
+    .where(
+      and(
+        eq(googleCalendarConnections.userId, userId),
+        or(
+          eq(googleCalendarConnections.googleAccountId, googleAccountIdentity),
+          eq(googleCalendarConnections.googleEmail, googleAccountIdentity),
+        ),
+      ),
+    )
+    .orderBy(asc(googleCalendarConnections.reconnectRequired), asc(googleCalendarConnections.connectedAt))
+    .limit(1);
+  if (!connection) {
+    throw new GoogleCalendarApiError("Google Calendar is not connected", 404);
+  }
+  if (connection.reconnectRequired) {
+    throw new GoogleCalendarApiError("Reconnect Google Calendar", 401, true);
+  }
+  return connection;
 }
 
-async function googleCalendarFetch<T>(userId: string, path: string, init: RequestInit = {}): Promise<T> {
-  const accessToken = await getValidGoogleAccessToken(userId);
+async function googleCalendarFetch<T>(connection: CalendarConnectionRow, path: string, init: RequestInit = {}): Promise<T> {
+  const accessToken = await getValidGoogleAccessToken(connection);
   const response = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
     ...init,
     headers: {
@@ -522,7 +918,7 @@ async function googleCalendarFetch<T>(userId: string, path: string, init: Reques
   });
 
   if (response.status === 401) {
-    await markGoogleCalendarReconnectRequired(userId);
+    await markGoogleCalendarReconnectRequired(connection.userId, connection.id);
     throw new GoogleCalendarApiError("Reconnect Google Calendar", 401, true);
   }
 
@@ -539,15 +935,14 @@ async function googleCalendarFetch<T>(userId: string, path: string, init: Reques
   return body as T;
 }
 
-async function getValidGoogleAccessToken(userId: string) {
-  const connection = await ensureGoogleCalendarConnection(userId);
+async function getValidGoogleAccessToken(connection: CalendarConnectionRow) {
   if (connection.tokenExpiresAt.getTime() > Date.now() + 60_000) {
     return decryptToken(connection.accessToken);
   }
-  return refreshGoogleAccessToken(userId, connection);
+  return refreshGoogleAccessToken(connection);
 }
 
-async function refreshGoogleAccessToken(userId: string, connection: CalendarConnectionRow) {
+async function refreshGoogleAccessToken(connection: CalendarConnectionRow) {
   const config = getGoogleCalendarConfig();
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -561,7 +956,7 @@ async function refreshGoogleAccessToken(userId: string, connection: CalendarConn
   });
   const body = (await response.json().catch(() => ({}))) as TokenResponse;
   if (!response.ok || !body.access_token) {
-    await markGoogleCalendarReconnectRequired(userId);
+    await markGoogleCalendarReconnectRequired(connection.userId, connection.id);
     throw new GoogleCalendarApiError("Reconnect Google Calendar", 401, true);
   }
 
@@ -576,15 +971,15 @@ async function refreshGoogleAccessToken(userId: string, connection: CalendarConn
       reconnectRequired: false,
       updatedAt: new Date(),
     })
-    .where(eq(googleCalendarConnections.userId, userId));
+    .where(and(eq(googleCalendarConnections.userId, connection.userId), eq(googleCalendarConnections.id, connection.id)));
 
   return body.access_token;
 }
 
 async function reconcileFetchedEvent(userId: string, event: GoogleCalendarEvent) {
-  const cached = await getCachedEvent(userId, event.calendarId, event.id);
+  const cached = await getCachedEvent(userId, event.googleAccountId, event.calendarId, event.id);
   if (cached?.pendingLocalUpdate && !cached.deleted) {
-    const pushed = await pushCachedEventToGoogle(userId, cached);
+    const pushed = await pushCachedEventToGoogle(userId, { ...cached, connectionId: event.connectionId });
     await upsertCachedEvent(userId, pushed, { localUpdatedAt: cached.localUpdatedAt, pendingLocalUpdate: false });
     return pushed;
   }
@@ -596,35 +991,33 @@ async function reconcileFetchedEvent(userId: string, event: GoogleCalendarEvent)
 }
 
 async function pushCachedEventToGoogle(userId: string, cached: CalendarCacheRow) {
-  const response = await googleCalendarFetch<GoogleCalendarApiEvent>(
+  const response = await updateGoogleCalendarEvent(
     userId,
-    `/calendars/${encodeURIComponent(cached.calendarId)}/events/${encodeURIComponent(cached.googleEventId)}`,
+    cached.connectionId,
+    cached.calendarId,
+    cached.googleEventId,
     {
-      method: "PATCH",
-      body: JSON.stringify(
-        toGoogleEventPayload({
-          title: cached.title,
-          description: cached.description,
-          location: cached.location,
-          start: cached.start,
-          end: cached.end,
-          allDay: cached.allDay,
-        }),
-      ),
+      connectionId: cached.connectionId,
+      calendarId: cached.calendarId,
+      title: cached.title,
+      description: cached.description,
+      location: cached.location,
+      start: cached.start,
+      end: cached.end,
+      allDay: cached.allDay,
     },
   );
-  const event = normalizeGoogleEvent(cached.calendarId, response);
-  if (!event) throw new GoogleCalendarApiError("Google returned an invalid event", 502);
-  return event;
+  return response;
 }
 
-async function getCachedEvent(userId: string, calendarId: string, googleEventId: string) {
+async function getCachedEvent(userId: string, googleAccountId: string, calendarId: string, googleEventId: string) {
   const [cached] = await db
     .select()
     .from(googleCalendarEventCache)
     .where(
       and(
         eq(googleCalendarEventCache.userId, userId),
+        eq(googleCalendarEventCache.googleAccountId, googleAccountId),
         eq(googleCalendarEventCache.calendarId, calendarId),
         eq(googleCalendarEventCache.googleEventId, googleEventId),
       ),
@@ -644,6 +1037,8 @@ async function upsertCachedEvent(
     .values({
       id: createId(),
       userId,
+      connectionId: event.connectionId,
+      googleAccountId: event.googleAccountId,
       calendarId: event.calendarId,
       googleEventId: event.id,
       etag: event.etag,
@@ -661,10 +1056,12 @@ async function upsertCachedEvent(
     .onConflictDoUpdate({
       target: [
         googleCalendarEventCache.userId,
+        googleCalendarEventCache.googleAccountId,
         googleCalendarEventCache.calendarId,
         googleCalendarEventCache.googleEventId,
       ],
       set: {
+        connectionId: event.connectionId,
         etag: event.etag,
         title: event.title,
         description: event.description,
@@ -680,13 +1077,15 @@ async function upsertCachedEvent(
     });
 }
 
-function normalizeGoogleEvent(calendarId: string, event: GoogleCalendarApiEvent): GoogleCalendarEvent | null {
+function normalizeGoogleEvent(connection: CalendarConnectionRow, calendarId: string, event: GoogleCalendarApiEvent): GoogleCalendarEvent | null {
   const start = event.start?.dateTime ?? event.start?.date;
   const end = event.end?.dateTime ?? event.end?.date;
   if (!event.id || !start || !end) return null;
   return {
+    connectionId: connection.id,
+    googleAccountId: connection.googleAccountId,
     id: event.id,
-    calendarId,
+    calendarId: canonicalGoogleCalendarId(connection, calendarId),
     title: event.summary ?? "(No title)",
     description: event.description ?? "",
     location: event.location ?? "",
@@ -753,13 +1152,12 @@ async function exchangeAuthorizationCode(
   return body;
 }
 
-async function fetchGoogleEmail(accessToken: string) {
+async function fetchGoogleProfile(accessToken: string) {
   const response = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { authorization: `Bearer ${accessToken}` },
   });
-  if (!response.ok) return "Google Calendar";
-  const body = (await response.json()) as GoogleUserInfo;
-  return body.email ?? "Google Calendar";
+  if (!response.ok) return { email: "Google Calendar" } satisfies GoogleUserInfo;
+  return (await response.json()) as GoogleUserInfo;
 }
 
 function encryptToken(value: string) {

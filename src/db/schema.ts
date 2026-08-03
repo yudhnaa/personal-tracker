@@ -16,6 +16,7 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  timeZone: text("time_zone").notNull().default("UTC"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -86,17 +87,23 @@ export const todos = pgTable("todos", {
   endAt: text("end_at"),
   allDay: boolean("all_day").notNull().default(false),
   location: text("location").default(""),
+  googleCalendarConnectionId: text("google_calendar_connection_id"),
+  googleCalendarAccountId: text("google_calendar_account_id"),
   googleCalendarId: text("google_calendar_id"),
   googleEventId: text("google_event_id"),
   googleEventLink: text("google_event_link"),
   googleEventPayload: jsonb("google_event_payload"),
 }, (table) => [
-  uniqueIndex("todos_user_calendar_event_idx").on(table.userId, table.googleCalendarId, table.googleEventId),
+  uniqueIndex("todos_user_calendar_event_idx").on(table.userId, table.googleCalendarAccountId, table.googleCalendarId, table.googleEventId),
 ]);
 
 export const notes = pgTable("notes", {
-  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default("Note"),
   text: text("text").notNull().default(""),
+  position: integer("position").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
@@ -147,7 +154,9 @@ export const devPasswordResetLinks = pgTable("dev_password_reset_links", {
 });
 
 export const googleCalendarConnections = pgTable("google_calendar_connections", {
-  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  googleAccountId: text("google_account_id").notNull(),
   googleEmail: text("google_email").notNull(),
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
@@ -159,13 +168,17 @@ export const googleCalendarConnections = pgTable("google_calendar_connections", 
   connectedAt: timestamp("connected_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
-});
+}, (table) => [
+  uniqueIndex("google_calendar_connections_user_account_idx").on(table.userId, table.googleAccountId),
+]);
 
 export const googleCalendarEventCache = pgTable(
   "google_calendar_event_cache",
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    connectionId: text("google_calendar_connection_id").notNull().references(() => googleCalendarConnections.id, { onDelete: "cascade" }),
+    googleAccountId: text("google_account_id").notNull(),
     calendarId: text("calendar_id").notNull(),
     googleEventId: text("google_event_id").notNull(),
     etag: text("etag"),
@@ -180,5 +193,5 @@ export const googleCalendarEventCache = pgTable(
     pendingLocalUpdate: boolean("pending_local_update").notNull().default(false),
     deleted: boolean("deleted").notNull().default(false),
   },
-  (table) => [uniqueIndex("google_calendar_event_user_calendar_event_idx").on(table.userId, table.calendarId, table.googleEventId)],
+  (table) => [uniqueIndex("google_calendar_event_user_calendar_event_idx").on(table.userId, table.googleAccountId, table.calendarId, table.googleEventId)],
 );

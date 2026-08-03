@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "@/lib/api-client";
 import { useApiState } from "@/lib/use-api-state";
@@ -16,10 +16,7 @@ type EventRange = { start: string; end: string };
 
 const DEFAULT_CONNECTION: GoogleCalendarConnectionStatus = {
   connected: false,
-  googleEmail: null,
-  selectedCalendarIds: [],
-  syncIntervalMinutes: 5,
-  reconnectRequired: false,
+  connections: [],
 };
 
 export type UseGoogleCalendarResult = ReturnType<typeof useGoogleCalendar>;
@@ -39,6 +36,10 @@ export function useGoogleCalendar() {
   
   const [range, setRange] = useState<EventRange | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const healthyConnections = useMemo(
+    () => connection.connections.filter((item) => item.connected && !item.reconnectRequired),
+    [connection.connections],
+  );
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -51,25 +52,15 @@ export function useGoogleCalendar() {
     }
   }, [queryClient]);
 
-  const markReconnectRequired = useCallback((message: string) => {
-    setConnection((current) => ({
-      ...current,
-      connected: false,
-      reconnectRequired: true,
-    }));
-    setError(message);
-    queryClient.setQueryData(["/api/google-calendar/calendars"], []);
-    queryClient.setQueryData(["/api/google-calendar/events", range ? new URLSearchParams(range).toString() : ""], []);
-  }, [setConnection, queryClient, range]);
-
   const handleError = useCallback((err: unknown) => {
     const message = extractErrorMessage(err);
     if (message.toLowerCase().includes("reconnect")) {
-      markReconnectRequired(message);
+      void reloadConnection();
+      setError(message);
     } else {
       setError(message);
     }
-  }, [markReconnectRequired]);
+  }, [reloadConnection]);
 
   const { data: calendarsData, isLoading: calendarsLoading, refetch: loadCalendars } = useQuery({
     queryKey: ["/api/google-calendar/calendars"],
@@ -81,7 +72,7 @@ export function useGoogleCalendar() {
         return [];
       }
     },
-    enabled: connection.connected && !connection.reconnectRequired,
+    enabled: connection.connected,
   });
   const calendars = calendarsData || [];
 
@@ -92,54 +83,82 @@ export function useGoogleCalendar() {
     queryKey: eventsQueryKey,
     queryFn: async () => {
       try {
-        return await apiJson<GoogleCalendarEvent[]>(`/api/google-calendar/events?${paramsString}`);
+        const syncedEvents = await apiJson<GoogleCalendarEvent[]>(`/api/google-calendar/events?${paramsString}`);
+        void queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+        return syncedEvents;
       } catch (err) {
         handleError(err);
         return [];
       }
     },
-    enabled: !!range && connection.connected && !connection.reconnectRequired,
+    enabled: !!range && connection.connected,
   });
   const events = eventsData || [];
 
   useEffect(() => {
-    if (!range || !connection.connected || connection.reconnectRequired) return;
-    const intervalMs = Math.max(connection.syncIntervalMinutes || 5, 1) * 60 * 1000;
+    if (!range || !connection.connected) return;
+    const intervalMinutes = healthyConnections.reduce(
+      (min, item) => Math.min(min, item.syncIntervalMinutes || 5),
+      5,
+    );
+    const intervalMs = Math.max(intervalMinutes, 1) * 60 * 1000;
     const interval = window.setInterval(() => {
       if (document.hidden) return;
       void syncNow();
     }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [connection.connected, connection.reconnectRequired, connection.syncIntervalMinutes, range, syncNow]);
+  }, [connection.connected, healthyConnections, range, syncNow]);
 
   function connect() {
     window.location.assign("/api/google-calendar/connect");
   }
 
-  async function disconnect() {
+  async function disconnect(connectionId?: string) {
     setError(null);
-    const next = await apiJson<GoogleCalendarConnectionStatus>("/api/google-calendar/connection", {
-      method: "DELETE",
-    });
+    const url = connectionId
+      ? `/api/google-calendar/connection?connectionId=${encodeURIComponent(connectionId)}`
+      : "/api/google-calendar/connection";
+    const next = await apiJson<GoogleCalendarConnectionStatus>(url, { method: "DELETE" });
     setConnection(next);
-    queryClient.setQueryData(["/api/google-calendar/calendars"], []);
-    queryClient.setQueryData(eventsQueryKey, []);
+    if (connectionId) {
+      queryClient.setQueryData<GoogleCalendarListItem[]>(["/api/google-calendar/calendars"], (current = []) =>
+        current.filter((calendar) => calendar.connectionId !== connectionId),
+      );
+      queryClient.setQueriesData<GoogleCalendarEvent[]>(
+        { queryKey: ["/api/google-calendar/events"] },
+        (current = []) => current.filter((event) => event.connectionId !== connectionId),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["/api/google-calendar/calendars"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/google-calendar/events"] });
+    } else {
+      queryClient.setQueryData(["/api/google-calendar/calendars"], []);
+      queryClient.setQueriesData({ queryKey: ["/api/google-calendar/events"] }, []);
+    }
   }
 
-  async function toggleCalendar(calendarId: string) {
+  async function toggleCalendar(connectionId: string, calendarId: string) {
     const previous = calendars;
     const next = calendars.map((calendar) =>
-      calendar.id === calendarId ? { ...calendar, selected: !calendar.selected } : calendar,
+      calendar.connectionId === connectionId && calendar.id === calendarId
+        ? { ...calendar, selected: !calendar.selected }
+        : calendar,
     );
     queryClient.setQueryData(["/api/google-calendar/calendars"], next);
-    const selectedCalendarIds = next.filter((calendar) => calendar.selected).map((calendar) => calendar.id);
+    const selectedCalendarIds = next
+      .filter((calendar) => calendar.connectionId === connectionId && calendar.selected)
+      .map((calendar) => calendar.id);
     try {
       const updated = await apiJson<GoogleCalendarListItem[]>("/api/google-calendar/calendars", {
         method: "PATCH",
-        body: JSON.stringify({ selectedCalendarIds }),
+        body: JSON.stringify({ connectionId, selectedCalendarIds }),
       });
       queryClient.setQueryData(["/api/google-calendar/calendars"], updated);
-      setConnection((current) => ({ ...current, selectedCalendarIds }));
+      setConnection((current) => ({
+        ...current,
+        connections: current.connections.map((connection) =>
+          connection.id === connectionId ? { ...connection, selectedCalendarIds } : connection,
+        ),
+      }));
       if (range) void syncNow();
     } catch (err) {
       queryClient.setQueryData(["/api/google-calendar/calendars"], previous);
@@ -168,7 +187,7 @@ export function useGoogleCalendar() {
     queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, (current = []) => upsertEvent(current, optimistic));
     try {
       const updated = await apiJson<GoogleCalendarEvent>(
-        `/api/google-calendar/events/${encodeURIComponent(event.id)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+        `/api/google-calendar/events/${encodeURIComponent(event.id)}?connectionId=${encodeURIComponent(event.connectionId)}&calendarId=${encodeURIComponent(event.calendarId)}`,
         {
           method: "PATCH",
           body: JSON.stringify(patch),
@@ -186,11 +205,15 @@ export function useGoogleCalendar() {
   async function deleteEvent(event: GoogleCalendarEvent) {
     const previous = events;
     queryClient.setQueryData<GoogleCalendarEvent[]>(eventsQueryKey, (current = []) => 
-      current.filter((item) => item.id !== event.id || item.calendarId !== event.calendarId)
+      current.filter((item) =>
+        item.id !== event.id ||
+        item.googleAccountId !== event.googleAccountId ||
+        item.calendarId !== event.calendarId
+      )
     );
     try {
       await apiJson<{ ok: true }>(
-        `/api/google-calendar/events/${encodeURIComponent(event.id)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+        `/api/google-calendar/events/${encodeURIComponent(event.id)}?connectionId=${encodeURIComponent(event.connectionId)}&calendarId=${encodeURIComponent(event.calendarId)}`,
         { method: "DELETE" },
       );
     } catch (err) {
@@ -222,10 +245,20 @@ export function useGoogleCalendar() {
 }
 
 function upsertEvent(events: GoogleCalendarEvent[], event: GoogleCalendarEvent) {
-  const exists = events.some((item) => item.id === event.id && item.calendarId === event.calendarId);
+  const exists = events.some((item) =>
+    item.id === event.id &&
+    item.googleAccountId === event.googleAccountId &&
+    item.calendarId === event.calendarId
+  );
   if (!exists) return [...events, event].sort((a, b) => a.start.localeCompare(b.start));
   return events
-    .map((item) => (item.id === event.id && item.calendarId === event.calendarId ? event : item))
+    .map((item) => (
+      item.id === event.id &&
+      item.googleAccountId === event.googleAccountId &&
+      item.calendarId === event.calendarId
+        ? event
+        : item
+    ))
     .sort((a, b) => a.start.localeCompare(b.start));
 }
 

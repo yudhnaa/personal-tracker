@@ -2,11 +2,13 @@ import { Queue, Worker, Job } from "bullmq";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { todos } from "@/db/schema";
-import { 
-  createGoogleCalendarEvent, 
-  updateGoogleCalendarEvent, 
+import {
+  GoogleCalendarApiError,
+  createGoogleCalendarEvent,
+  updateGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
-  type GoogleCalendarEventDraft 
+  deleteGoogleCalendarEventByAccount,
+  type GoogleCalendarEventDraft
 } from "../google-calendar";
 
 export interface CreateEventJobData {
@@ -24,6 +26,8 @@ export interface UpdateEventJobData {
 export interface DeleteEventJobData {
   type: "deleteEvent";
   userId: string;
+  connectionId: string;
+  googleAccountId?: string;
   calendarId: string;
   eventId: string;
 }
@@ -75,12 +79,13 @@ if (typeof window === "undefined") {
         switch (data.type) {
           case "createEvent": {
             const [task] = await db.select().from(todos).where(and(eq(todos.id, data.todoId), eq(todos.userId, data.userId)));
-            if (!task || !task.googleCalendarId) {
+            if (!task || !task.googleCalendarConnectionId || !task.googleCalendarId) {
               console.log(`[BullMQ] Task ${data.todoId} was deleted or lacks calendar before event creation. Skipping.`);
               break;
             }
             
             const draft: GoogleCalendarEventDraft = {
+              connectionId: task.googleCalendarConnectionId,
               calendarId: task.googleCalendarId,
               title: task.title,
               description: task.description ?? undefined,
@@ -94,6 +99,7 @@ if (typeof window === "undefined") {
             await db.update(todos)
               .set({
                 googleEventId: event.id,
+                googleCalendarAccountId: event.googleAccountId,
                 googleEventLink: event.htmlLink ?? null,
                 googleEventPayload: { etag: event.etag, updated: event.updated },
                 syncStatus: "synced",
@@ -103,12 +109,14 @@ if (typeof window === "undefined") {
           }
           case "updateEvent": {
             const [task] = await db.select().from(todos).where(and(eq(todos.id, data.todoId), eq(todos.userId, data.userId)));
-            if (!task || !task.googleCalendarId || !task.googleEventId) {
+            if (!task || !task.googleCalendarConnectionId || !task.googleCalendarId || !task.googleEventId) {
               console.log(`[BullMQ] Task ${data.todoId} missing or not fully linked. Skipping update.`);
               break;
             }
 
             const draft: GoogleCalendarEventDraft = {
+              connectionId: task.googleCalendarConnectionId,
+              calendarId: task.googleCalendarId,
               title: task.title,
               description: task.description ?? undefined,
               location: task.location ?? undefined,
@@ -119,6 +127,7 @@ if (typeof window === "undefined") {
 
             const event = await updateGoogleCalendarEvent(
               data.userId,
+              task.googleCalendarConnectionId,
               task.googleCalendarId,
               task.googleEventId,
               draft
@@ -126,6 +135,7 @@ if (typeof window === "undefined") {
             await db.update(todos)
               .set({
                 googleEventLink: event.htmlLink ?? null,
+                googleCalendarAccountId: event.googleAccountId,
                 googleEventPayload: { etag: event.etag, updated: event.updated },
                 syncStatus: "synced",
               })
@@ -133,7 +143,30 @@ if (typeof window === "undefined") {
             break;
           }
           case "deleteEvent": {
-            await deleteGoogleCalendarEvent(data.userId, data.calendarId, data.eventId);
+            try {
+              await deleteGoogleCalendarEvent(data.userId, data.connectionId, data.calendarId, data.eventId);
+            } catch (error) {
+              if (isMissingGoogleCalendarConnection(error)) {
+                if (data.googleAccountId) {
+                  try {
+                    await deleteGoogleCalendarEventByAccount(
+                      data.userId,
+                      data.googleAccountId,
+                      data.calendarId,
+                      data.eventId,
+                    );
+                    break;
+                  } catch (fallbackError) {
+                    if (!isMissingGoogleCalendarConnection(fallbackError)) throw fallbackError;
+                  }
+                }
+                console.log(
+                  `[BullMQ] Connection ${data.connectionId} was removed before event deletion. Skipping delete job.`,
+                );
+                break;
+              }
+              throw error;
+            }
             break;
           }
         }
@@ -164,4 +197,8 @@ if (typeof window === "undefined") {
       console.error(`[BullMQ] Worker error:`, err);
     });
   }
+}
+
+function isMissingGoogleCalendarConnection(error: unknown) {
+  return error instanceof GoogleCalendarApiError && error.status === 404;
 }

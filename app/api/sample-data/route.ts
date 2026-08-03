@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { bookmarkGroups, bookmarks, habitCompletions, habits, notes } from "@/db/schema";
 import { requireUserId, unauthorized } from "@/lib/session";
 import { eq } from "drizzle-orm";
+import { createId } from "@/lib/id";
 
 export async function POST() {
   const userId = await requireUserId();
@@ -31,9 +32,14 @@ export async function POST() {
     const completions = habitRows.flatMap((habit) => habit.done.map((date) => ({ userId, habitId: habit.id, date })));
     if (completions.length) await db.insert(habitCompletions).values(completions);
   }
-  await db.insert(notes).values({ userId, text: SAMPLE_NOTE }).onConflictDoUpdate({
-    target: notes.userId,
-    set: { text: SAMPLE_NOTE, updatedAt: new Date() },
+  await db.insert(notes).values({
+    id: createId(),
+    userId,
+    title: "Note",
+    text: SAMPLE_NOTE,
+    position: 0,
+    createdAt: Date.now(),
+    updatedAt: new Date(),
   });
   return NextResponse.json({ ok: true });
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
-import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -17,9 +18,10 @@ import { useSettings } from "./lib/use-settings";
 import { BookmarkCard } from "./features/bookmarks/bookmark-card";
 import { HabitCard } from "./features/habits/habit-card";
 import { NotesCard } from "./features/notes/notes-card";
+import { useNotes } from "./features/notes/use-notes";
 import { PomodoroCard } from "./features/pomodoro/pomodoro-card";
 import { TodoCard } from "./features/todo/todo-card";
-import { type Locale } from "./lib/i18n";
+import { messages, type Locale } from "./lib/i18n";
 import { useGoogleCalendar } from "./features/google-calendar/use-google-calendar";
 import { useMediaQuery } from "./lib/use-media-query";
 import { DEFAULT_SETTINGS } from "./lib/settings";
@@ -37,6 +39,7 @@ export function App({
 }) {
 	const { settings, update } = useSettings();
 	const googleCalendar = useGoogleCalendar();
+	const { notes, addNote, patchNote: patchStoredNote, removeNote: removeStoredNote } = useNotes();
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [locale, setLocale] = useState<Locale>(initialLocale);
 	const { data: welcomed, setData: setWelcomed } = useApiState<boolean>(
@@ -49,8 +52,6 @@ export function App({
 	const [localHiddenCards, setLocalHiddenCards] = useState<string[]>([]);
 	const isDesktop = useMediaQuery("(min-width: 1024px)");
 	
-	const { width, containerRef, mounted } = useContainerWidth();
-
 	// Read localStorage on mount to prevent flash; sync back when welcomed changes
 	useEffect(() => {
 		if (welcomed) {
@@ -69,9 +70,11 @@ export function App({
 		});
 	}
 
-	const activeLayout = editMode 
+	const noteIds = useMemo(() => notes.map((note) => note.id), [notes]);
+	const baseLayout = editMode
 		? localLayout 
 		: (settings.layout && Object.keys(settings.layout).length > 0 ? settings.layout : DEFAULT_SETTINGS.layout);
+	const activeLayout = useMemo(() => normalizeLayoutForNotes(baseLayout, noteIds), [baseLayout, noteIds]);
 	
 	const activeHiddenCards = editMode 
 		? localHiddenCards 
@@ -81,12 +84,12 @@ export function App({
 
 	const handleStartEdit = () => {
 		setEditMode(true);
-		setLocalLayout(settings.layout && Object.keys(settings.layout).length > 0 ? settings.layout : DEFAULT_SETTINGS.layout);
+		setLocalLayout(normalizeLayoutForNotes(settings.layout && Object.keys(settings.layout).length > 0 ? settings.layout : DEFAULT_SETTINGS.layout, noteIds));
 		setLocalHiddenCards(settings.hiddenCards || []);
 	};
 
 	const handleSaveEdit = () => {
-		update({ layout: localLayout, hiddenCards: localHiddenCards });
+		update({ layout: activeLayout, hiddenCards: localHiddenCards });
 		setEditMode(false);
 	};
 
@@ -124,11 +127,22 @@ export function App({
 		}
 	};
 
-	const cards = {
+	const handleAddNote = async () => {
+		await addNote();
+	};
+
+	const patchNote = useCallback((id: string, patch: { title?: string; text?: string }) => {
+		patchStoredNote(id, patch);
+	}, [patchStoredNote]);
+
+	const removeNote = useCallback((id: string) => {
+		removeStoredNote(id);
+	}, [removeStoredNote]);
+
+	const cards: Record<string, ReactNode> = {
 		todo: (
 			<TodoCard
 				className="h-full"
-				archiveDays={settings.archiveDays}
 				googleCalendar={googleCalendar}
 				editMode={editMode && isDesktop}
 				onHide={() => handleHideCard("todo")}
@@ -139,13 +153,6 @@ export function App({
 				className="h-full"
 				editMode={editMode && isDesktop}
 				onHide={() => handleHideCard("pomodoro")}
-			/>
-		),
-		notes: (
-			<NotesCard
-				className="h-full"
-				editMode={editMode && isDesktop}
-				onHide={() => handleHideCard("notes")}
 			/>
 		),
 		bookmarks: (
@@ -164,6 +171,20 @@ export function App({
 		),
 	};
 
+	for (const note of notes) {
+		const id = noteCardId(note.id);
+		cards[id] = (
+			<NotesCard
+				note={note}
+				className="h-full"
+				editMode={editMode && isDesktop}
+				onHide={() => handleHideCard(id)}
+				onPatch={(patch) => patchNote(note.id, patch)}
+				onDelete={() => removeNote(note.id)}
+			/>
+		);
+	}
+
 	return (
 		<div className="min-h-screen p-2">
 			<div className="flex flex-col gap-2 rounded-[2rem] bg-shell p-2 backdrop-blur-sm lg:h-[calc(100dvh-1rem)]">
@@ -178,6 +199,8 @@ export function App({
 					onCancelEdit={handleCancelEdit}
 					hiddenCards={activeHiddenCards}
 					onRestoreCard={handleRestoreCard}
+					onAddNote={handleAddNote}
+					addNoteLabel={messages[locale].features.notes.addNote}
 				/>
 				{isDesktop ? (
 					<motion.div
@@ -192,7 +215,7 @@ export function App({
 							editMode={editMode}
 						>
 								{Object.entries(cards).map(([id, card]) => {
-									if (hiddenCardsSet.has(id)) return null;
+									if (hiddenCardsSet.has(id) || (id === noteCardId(noteIds[0] ?? "") && hiddenCardsSet.has("notes"))) return null;
 									return (
 										<div key={id} className="h-full w-full">
 											{card}
@@ -211,7 +234,11 @@ export function App({
 						<div className="min-h-[460px]">{cards.todo}</div>
 						<div className="flex flex-col gap-2">
 							<div className="min-h-[320px] shrink-0">{cards.pomodoro}</div>
-							<div className="min-h-[320px] flex-1">{cards.notes}</div>
+							{notes.map((note) => (
+								<div key={note.id} className="min-h-[320px] flex-1">
+									{cards[noteCardId(note.id)]}
+								</div>
+							))}
 						</div>
 						<div className="min-h-[320px]">{cards.bookmarks}</div>
 						<div className="min-h-[320px]">{cards.habits}</div>
@@ -238,4 +265,38 @@ export function App({
 			<StorageAlert locale={locale} />
 		</div>
 	);
+}
+
+function noteCardId(noteId: string) {
+	return `note:${noteId}`;
+}
+
+function normalizeLayoutForNotes(layout: Record<string, any> | null, noteIds: string[]) {
+	const source = layout && Object.keys(layout).length > 0 ? layout : DEFAULT_SETTINGS.layout;
+	const lg = Array.isArray(source?.lg) ? [...source.lg] : [...(DEFAULT_SETTINGS.layout?.lg ?? [])];
+	const firstNoteId = noteIds[0] ? noteCardId(noteIds[0]) : null;
+	const noteIdSet = new Set(noteIds.map(noteCardId));
+	const normalized: any[] = [];
+	let migratedFirstNote = false;
+
+	for (const item of lg) {
+		if (item.i === "notes") {
+			if (firstNoteId && !migratedFirstNote) {
+				normalized.push({ ...item, i: firstNoteId });
+				migratedFirstNote = true;
+			}
+			continue;
+		}
+		if (item.i?.startsWith?.("note:") && !noteIdSet.has(item.i)) continue;
+		normalized.push(item);
+	}
+
+	for (const noteId of noteIds) {
+		const cardId = noteCardId(noteId);
+		if (normalized.some((item) => item.i === cardId)) continue;
+		const y = normalized.reduce((max, item) => Math.max(max, (item.y ?? 0) + (item.h ?? 8)), 0);
+		normalized.push({ i: cardId, x: 8, y, w: 4, h: 18, minW: 3, minH: 10 });
+	}
+
+	return { ...source, lg: normalized };
 }

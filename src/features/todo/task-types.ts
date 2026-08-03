@@ -27,6 +27,8 @@ export type Task = {
   endAt?: string;
   allDay?: boolean;
   location?: string;
+  googleCalendarConnectionId?: string;
+  googleCalendarAccountId?: string;
   googleCalendarId?: string;
   googleEventId?: string;
   googleEventLink?: string;

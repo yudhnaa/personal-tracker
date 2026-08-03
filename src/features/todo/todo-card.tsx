@@ -19,13 +19,12 @@ type View = "board" | "calendar";
 
 type TodoCardProps = {
   className?: string;
-  archiveDays: number;
   googleCalendar: UseGoogleCalendarResult;
   editMode?: boolean;
   onHide?: () => void;
 };
 
-export function TodoCard({ className, archiveDays, googleCalendar, editMode, onHide }: TodoCardProps) {
+export function TodoCard({ className, googleCalendar, editMode, onHide }: TodoCardProps) {
   const { tasks, byStatus, addTask, patchTask, reorderTasks, removeTask } = useTodos();
   const [view, setView] = useLocalStorage<View>("pt.todo-view", "board");
   const [mounted, setMounted] = useState(false);
@@ -69,6 +68,7 @@ export function TodoCard({ className, archiveDays, googleCalendar, editMode, onH
         start: draft.startAt || draft.dueDate, // TaskDialog returns iso format
         end: draft.endAt || "",
         allDay: draft.allDay,
+        connectionId: draft.googleCalendarConnectionId!,
         calendarId: draft.googleCalendarId!,
       });
     }
@@ -93,8 +93,12 @@ export function TodoCard({ className, archiveDays, googleCalendar, editMode, onH
       endAt: event.end,
       allDay: event.allDay,
       location: event.location,
+      source: "google",
+      syncStatus: "synced",
       status: "todo",
       checklist: [],
+      googleCalendarConnectionId: event.connectionId,
+      googleCalendarAccountId: event.googleAccountId,
       googleCalendarId: event.calendarId,
       googleEventId: event.id,
       googleEventLink: event.htmlLink ?? undefined,
@@ -149,7 +153,6 @@ export function TodoCard({ className, archiveDays, googleCalendar, editMode, onH
           onReorder={reorderTasks}
           onOpen={(task) => setDetailTaskId(task.id)}
           onAddTask={(status) => openNew({ status })}
-          archiveDays={archiveDays}
         />
       ) : (
         <CalendarView
@@ -166,7 +169,7 @@ export function TodoCard({ className, archiveDays, googleCalendar, editMode, onH
         open={createItem !== null}
         task={createItem?.task ?? null}
         defaultType={createItem?.type ?? "task"}
-        googleCalendarConnected={googleCalendar.connection.connected && !googleCalendar.connection.reconnectRequired}
+        googleCalendarConnected={googleCalendar.connection.connected}
         googleCalendars={googleCalendar.calendars}
         onClose={() => setCreateItem(null)}
         onSubmit={handleCreateSubmit}

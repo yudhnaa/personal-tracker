@@ -31,7 +31,6 @@ import {
   type Task,
   type TaskStatus,
 } from "./task-types";
-import { isArchivedDone } from "./use-todos";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 
@@ -41,8 +40,6 @@ type KanbanBoardProps = {
   onOpen: (task: Task) => void;
   /** Create a new task pre-set to a column's status (Trello-style add). */
   onAddTask: (status: TaskStatus) => void;
-  /** Auto-hide done tasks older than this many days (0 = never). */
-  archiveDays: number;
 };
 
 type Columns = Record<TaskStatus, string[]>;
@@ -62,7 +59,6 @@ export function KanbanBoard({
   onReorder,
   onOpen,
   onAddTask,
-  archiveDays,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [columns, setColumns] = useState<Columns>(() =>
@@ -179,7 +175,6 @@ export function KanbanBoard({
             taskMap={taskMap}
             onOpen={onOpen}
             onAddTask={onAddTask}
-            archiveDays={archiveDays}
           />
         ))}
       </div>
@@ -201,7 +196,6 @@ type ColumnProps = {
   taskMap: Map<string, Task>;
   onOpen: (task: Task) => void;
   onAddTask: (status: TaskStatus) => void;
-  archiveDays: number;
 };
 
 function Column({
@@ -210,28 +204,12 @@ function Column({
   taskMap,
   onOpen,
   onAddTask,
-  archiveDays,
 }: ColumnProps) {
   const meta = STATUS_META[status];
   // The column id doubles as a droppable so empty columns still accept drops.
   const { setNodeRef, isOver } = useDroppable({ id: status });
-  const [showArchived, setShowArchived] = useState(false);
   const locale = useLocale();
   const t = messages[locale].features.todo;
-
-  // In Done, fold away tasks completed long ago so the board stays light.
-  // They stay in storage and on the board model — just hidden until revealed.
-  const archivedIds =
-    status === "done"
-      ? ids.filter((id) => {
-          const t = taskMap.get(id);
-          return t ? isArchivedDone(t, archiveDays) : false;
-        })
-      : [];
-  const visibleIds =
-    archivedIds.length && !showArchived
-      ? ids.filter((id) => !archivedIds.includes(id))
-      : ids;
 
   return (
     <div
@@ -245,12 +223,12 @@ function Column({
         <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
         <span className="text-xs font-semibold text-ink">{t.columns[status]}</span>
         <span className="ml-auto text-xs font-medium text-ink-faint">
-          {ids.length - archivedIds.length}
+          {ids.length}
         </span>
       </div>
-      <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
-          {visibleIds.map((id) => {
+          {ids.map((id) => {
             const task = taskMap.get(id);
             return task ? (
               <SortableTaskCard
@@ -262,17 +240,6 @@ function Column({
           })}
         </div>
       </SortableContext>
-      {archivedIds.length ? (
-        <button
-          type="button"
-          onClick={() => setShowArchived((s) => !s)}
-          className="mt-1.5 shrink-0 rounded-[0.6rem] px-1.5 py-1 text-left text-[11px] font-medium text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink-soft"
-        >
-          {showArchived
-            ? t.archiveHide
-            : t.archiveShow(archivedIds.length, archiveDays)}
-        </button>
-      ) : null}
       <button
         type="button"
         onClick={() => onAddTask(status)}

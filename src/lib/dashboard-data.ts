@@ -1,4 +1,4 @@
-import { and, asc, eq, lt } from "drizzle-orm";
+import { and, asc, eq, gte, lt, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bookmarkGroups,
@@ -8,12 +8,23 @@ import {
   habits,
   notes,
   todos,
+  user,
 } from "@/db/schema";
 import { createId } from "./id";
 import { DEFAULT_SETTINGS, type Settings } from "./settings";
+import { startOfTodayInTimeZoneMs } from "./timezone";
 import type { Bookmark } from "@/features/bookmarks/use-bookmarks";
 import type { Habit } from "@/features/habits/use-habits";
 import type { Task, TaskSource, TaskSyncStatus } from "@/features/todo/task-types";
+
+export type Note = {
+  id: string;
+  title: string;
+  text: string;
+  position: number;
+  createdAt: number;
+  updatedAt: string;
+};
 
 export function parseChecklist(value: string): Task["checklist"] {
   try {
@@ -35,6 +46,8 @@ export function toTask(row: typeof todos.$inferSelect): Task {
     endAt: row.endAt ?? undefined,
     allDay: row.allDay,
     location: row.location ?? undefined,
+    googleCalendarConnectionId: row.googleCalendarConnectionId ?? undefined,
+    googleCalendarAccountId: row.googleCalendarAccountId ?? undefined,
     googleCalendarId: row.googleCalendarId ?? undefined,
     googleEventId: row.googleEventId ?? undefined,
     googleEventLink: row.googleEventLink ?? undefined,
@@ -73,6 +86,15 @@ export async function getSettings(userId: string): Promise<Settings> {
         hiddenCards: stored.hiddenCards ? JSON.parse(stored.hiddenCards) : [],
       }
     : DEFAULT_SETTINGS;
+}
+
+export async function getUserTimeZone(userId: string) {
+  const [stored] = await db
+    .select({ timeZone: user.timeZone })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  return stored?.timeZone ?? "UTC";
 }
 
 export async function upsertSettings(userId: string, patch: Partial<Settings>) {
@@ -143,6 +165,25 @@ export async function getTodos(userId: string) {
   return rows.map(toTask);
 }
 
+export async function getVisibleTodos(userId: string) {
+  const timeZone = await getUserTimeZone(userId);
+  const todayStart = startOfTodayInTimeZoneMs(timeZone);
+  const rows = await db
+    .select()
+    .from(todos)
+    .where(
+      and(
+        eq(todos.userId, userId),
+        or(
+          ne(todos.status, "done"),
+          gte(todos.doneAt, todayStart),
+        ),
+      ),
+    )
+    .orderBy(asc(todos.position), asc(todos.createdAt));
+  return rows.map(toTask);
+}
+
 export async function replaceTodos(userId: string, next: Task[]) {
   return await db.transaction(async (tx) => {
     await tx.delete(todos).where(eq(todos.userId, userId));
@@ -165,6 +206,8 @@ export async function replaceTodos(userId: string, next: Task[]) {
           endAt: task.endAt ?? null,
           allDay: task.allDay ?? false,
           location: task.location ?? "",
+          googleCalendarConnectionId: task.googleCalendarConnectionId ?? null,
+          googleCalendarAccountId: task.googleCalendarAccountId ?? null,
           googleCalendarId: task.googleCalendarId ?? null,
           googleEventId: task.googleEventId ?? null,
           googleEventLink: task.googleEventLink ?? null,
@@ -179,6 +222,72 @@ export async function replaceTodos(userId: string, next: Task[]) {
       .orderBy(asc(todos.position), asc(todos.createdAt));
     return rows.map(toTask);
   });
+}
+
+export async function replaceVisibleTodos(userId: string, next: Task[]) {
+  await db.transaction(async (tx) => {
+    const currentRows = await tx
+      .select()
+      .from(todos)
+      .where(eq(todos.userId, userId))
+      .orderBy(asc(todos.position), asc(todos.createdAt));
+    const incomingIds = new Set(next.map((task) => task.id));
+    const preserved = currentRows
+      .map(toTask)
+      .filter((task) => !incomingIds.has(task.id) && task.status === "done");
+    const merged = [...next, ...preserved];
+
+    await tx.delete(todos).where(eq(todos.userId, userId));
+    if (merged.length) {
+      await tx.insert(todos).values(
+        merged.map((task, index) => ({
+          id: task.id,
+          userId,
+          title: task.title,
+          description: task.description,
+          dueDate: task.dueDate,
+          status: task.status,
+          checklist: JSON.stringify(task.checklist ?? []),
+          doneAt: task.doneAt ?? null,
+          createdAt: task.createdAt,
+          position: index,
+          source: task.source,
+          syncStatus: task.syncStatus,
+          startAt: task.startAt ?? null,
+          endAt: task.endAt ?? null,
+          allDay: task.allDay ?? false,
+          location: task.location ?? "",
+          googleCalendarConnectionId: task.googleCalendarConnectionId ?? null,
+          googleCalendarAccountId: task.googleCalendarAccountId ?? null,
+          googleCalendarId: task.googleCalendarId ?? null,
+          googleEventId: task.googleEventId ?? null,
+          googleEventLink: task.googleEventLink ?? null,
+          googleEventPayload: task.googleEventPayload ?? null,
+        })),
+      );
+    }
+  });
+  return getVisibleTodos(userId);
+}
+
+export function toNote(row: typeof notes.$inferSelect): Note {
+  return {
+    id: row.id,
+    title: row.title,
+    text: row.text,
+    position: row.position,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function getNotes(userId: string) {
+  const rows = await db
+    .select()
+    .from(notes)
+    .where(eq(notes.userId, userId))
+    .orderBy(asc(notes.position), asc(notes.createdAt));
+  return rows.map(toNote);
 }
 
 export async function getBookmarks(userId: string) {

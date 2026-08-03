@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { todos } from "@/db/schema";
-import { getTodos } from "@/lib/dashboard-data";
+import { getVisibleTodos } from "@/lib/dashboard-data";
 import { parseJson, taskPatchSchema } from "@/lib/dashboard-validation";
 import { requireUserId, unauthorized } from "@/lib/session";
-import { type GoogleCalendarEventDraft } from "@/lib/google-calendar";
 import { googleCalendarQueue } from "@/lib/queue/google-calendar-queue";
-
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const userId = await requireUserId();
@@ -29,6 +27,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (body.endAt !== undefined) changes.endAt = body.endAt ?? null;
   if (body.allDay !== undefined) changes.allDay = body.allDay;
   if (body.location !== undefined) changes.location = body.location;
+  if (body.googleCalendarConnectionId !== undefined) changes.googleCalendarConnectionId = body.googleCalendarConnectionId ?? null;
+  if (body.googleCalendarAccountId !== undefined) changes.googleCalendarAccountId = body.googleCalendarAccountId ?? null;
   if (body.googleCalendarId !== undefined) changes.googleCalendarId = body.googleCalendarId ?? null;
   if (body.googleEventId !== undefined) changes.googleEventId = body.googleEventId ?? null;
   if (body.googleEventLink !== undefined) changes.googleEventLink = body.googleEventLink ?? null;
@@ -38,12 +38,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select()
     .from(todos)
     .where(and(eq(todos.userId, userId), eq(todos.id, id)));
-  
+
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isLinkedTask = !!existing.googleCalendarId;
+  const isLinkedTask = !!existing.googleCalendarConnectionId && !!existing.googleCalendarId;
   const hasSyncableChanges =
     body.title !== undefined ||
     body.description !== undefined ||
@@ -75,7 +75,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
-  return NextResponse.json(await getTodos(userId));
+  return NextResponse.json(await getVisibleTodos(userId));
 }
 
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -88,11 +88,13 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     .from(todos)
     .where(and(eq(todos.userId, userId), eq(todos.id, id)));
 
-  if (existing?.googleCalendarId && existing?.googleEventId) {
+  if (existing?.googleCalendarConnectionId && existing?.googleCalendarId && existing?.googleEventId) {
     try {
       await googleCalendarQueue.add("deleteEvent", {
         type: "deleteEvent",
         userId,
+        connectionId: existing.googleCalendarConnectionId,
+        googleAccountId: existing.googleCalendarAccountId ?? undefined,
         calendarId: existing.googleCalendarId,
         eventId: existing.googleEventId,
       });
@@ -102,6 +104,5 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
   }
 
   await db.delete(todos).where(and(eq(todos.userId, userId), eq(todos.id, id)));
-  return NextResponse.json(await getTodos(userId));
+  return NextResponse.json(await getVisibleTodos(userId));
 }
-

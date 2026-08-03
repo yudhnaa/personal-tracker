@@ -15,8 +15,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!userId) return unauthorized();
 
   const calendarId = request.nextUrl.searchParams.get("calendarId");
-  if (!calendarId) {
-    return NextResponse.json({ error: "Missing calendarId" }, { status: 400 });
+  const connectionId = request.nextUrl.searchParams.get("connectionId");
+  if (!connectionId || !calendarId) {
+    return NextResponse.json({ error: "Missing connectionId or calendarId" }, { status: 400 });
   }
 
   const { eventId } = await context.params;
@@ -24,7 +25,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if ("response" in parsed) return parsed.response;
 
   try {
-    return NextResponse.json(await updateGoogleCalendarEvent(userId, calendarId, eventId, parsed.data));
+    return NextResponse.json(await updateGoogleCalendarEvent(userId, connectionId, calendarId, eventId, parsed.data));
   } catch (error) {
     return googleCalendarApiErrorResponse(error);
   }
@@ -35,14 +36,15 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   if (!userId) return unauthorized();
 
   const calendarId = request.nextUrl.searchParams.get("calendarId");
-  if (!calendarId) {
-    return NextResponse.json({ error: "Missing calendarId" }, { status: 400 });
+  const connectionId = request.nextUrl.searchParams.get("connectionId");
+  if (!connectionId || !calendarId) {
+    return NextResponse.json({ error: "Missing connectionId or calendarId" }, { status: 400 });
   }
 
   const { eventId } = await context.params;
 
   try {
-    return NextResponse.json(await deleteGoogleCalendarEvent(userId, calendarId, eventId));
+    return NextResponse.json(await deleteGoogleCalendarEvent(userId, connectionId, calendarId, eventId));
   } catch (error) {
     return googleCalendarApiErrorResponse(error);
   }

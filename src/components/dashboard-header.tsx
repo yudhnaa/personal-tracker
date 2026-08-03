@@ -5,6 +5,7 @@ import {
 	LayoutGrid,
 	Eye,
 	Check,
+	Plus,
 } from "lucide-react";
 import { messages, type Locale } from "@/lib/i18n";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -21,6 +22,8 @@ type DashboardHeaderProps = {
 	onCancelEdit: () => void;
 	hiddenCards: string[];
 	onRestoreCard: (id: string) => void;
+	onAddNote: () => void;
+	addNoteLabel: string;
 };
 
 /**
@@ -39,6 +42,8 @@ export function DashboardHeader({
 	onCancelEdit,
 	hiddenCards,
 	onRestoreCard,
+	onAddNote,
+	addNoteLabel,
 }: DashboardHeaderProps) {
 	const t = messages[locale];
 
@@ -129,6 +134,15 @@ export function DashboardHeader({
 						<span className="hidden sm:inline">Edit Layout</span>
 					</button>
 				)}
+
+				<button
+					type="button"
+					onClick={onAddNote}
+					className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-surface-muted px-3 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover"
+				>
+					<Plus size={16} />
+					<span className="hidden sm:inline">{addNoteLabel}</span>
+				</button>
 
 				<button
 					type="button"

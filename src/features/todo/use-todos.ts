@@ -6,8 +6,8 @@ import { TASK_STATUSES, type Task, type TaskStatus } from "./task-types";
 
 export type TaskDraft = Pick<
   Task,
-  "title" | "description" | "dueDate" | "status" | "checklist" | "googleCalendarId" | "googleEventId" | "googleEventLink" | "startAt" | "endAt" | "allDay" | "location"
->;
+  "title" | "description" | "dueDate" | "status" | "checklist" | "googleCalendarConnectionId" | "googleCalendarAccountId" | "googleCalendarId" | "googleEventId" | "googleEventLink" | "startAt" | "endAt" | "allDay" | "location"
+> & Partial<Pick<Task, "source" | "syncStatus">>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,6 +33,7 @@ function stampDone(tasks: Task[]): Task[] {
 
 /** Source of truth for tasks with grouping + CRUD + status moves. */
 export function useTodos() {
+  const queryClient = useQueryClient();
   const { data: tasks, setData: setRawTasks, commit, reload } = useApiState<Task[]>(
     "/api/todos",
     [],
@@ -75,7 +76,13 @@ export function useTodos() {
       }),
       () => tasks,
     );
-    if (created) setRawTasks((prev) => stampDone([created, ...prev]));
+    if (created) {
+      setRawTasks((prev) => {
+        const exists = prev.some((task) => task.id === created.id);
+        return stampDone(exists ? prev.map((task) => (task.id === created.id ? created : task)) : [created, ...prev]);
+      });
+      removeLinkedGoogleEventFromCache(queryClient, created);
+    }
     return created ?? null;
   }
 
@@ -128,18 +135,9 @@ export function useTodos() {
     setTasks(next);
   }
 
-  const queryClient = useQueryClient();
-
   function removeTask(id: string) {
     const taskToDelete = tasks.find((t) => t.id === id);
-    if (taskToDelete?.googleEventId) {
-      // Optimistically remove the linked event from the frontend calendar cache
-      // so it doesn't pop up while the backend delete job is processing.
-      queryClient.setQueriesData<{ id: string }[]>(
-        { queryKey: ["/api/google-calendar/events"] },
-        (old) => (old ? old.filter((e) => e.id !== taskToDelete.googleEventId) : old)
-      );
-    }
+    if (taskToDelete) removeLinkedGoogleEventFromCache(queryClient, taskToDelete);
     setRawTasks((prev) => prev.filter((t) => t.id !== id));
     void commit(apiJson<Task[]>(`/api/todos/${id}`, { method: "DELETE" }), async () => {
       await reload();
@@ -157,4 +155,18 @@ export function useTodos() {
     reorderTasks,
     removeTask,
   };
+}
+
+function removeLinkedGoogleEventFromCache(queryClient: ReturnType<typeof useQueryClient>, task: Task) {
+  if (!task.googleCalendarAccountId || !task.googleCalendarId || !task.googleEventId) return;
+  const calendarIds = new Set([task.googleCalendarId]);
+  if (task.googleCalendarId.includes("@")) calendarIds.add("primary");
+  queryClient.setQueriesData<{ id: string; googleAccountId?: string; calendarId?: string }[]>(
+    { queryKey: ["/api/google-calendar/events"] },
+    (old) => (old ? old.filter((event) =>
+      event.id !== task.googleEventId ||
+      event.googleAccountId !== task.googleCalendarAccountId ||
+      !calendarIds.has(event.calendarId ?? "")
+    ) : old),
+  );
 }

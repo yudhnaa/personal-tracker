@@ -1,9 +1,11 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { createId } from "./id";
+import { normalizeTimeZone } from "./timezone";
 
 function getAuthSecret() {
   const secret = process.env.BETTER_AUTH_SECRET;
@@ -42,6 +44,21 @@ export const auth = betterAuth({
           url: resetUrl,
         });
       }
+    },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        async after(session, context) {
+          const rawTimeZone = context?.request?.headers.get("x-client-timezone");
+          if (!rawTimeZone || !session?.userId) return;
+          const timeZone = normalizeTimeZone(rawTimeZone);
+          await db
+            .update(schema.user)
+            .set({ timeZone, updatedAt: new Date() })
+            .where(eq(schema.user.id, session.userId));
+        },
+      },
     },
   },
   plugins: [nextCookies()],

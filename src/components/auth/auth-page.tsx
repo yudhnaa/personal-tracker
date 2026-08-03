@@ -24,9 +24,10 @@ export function AuthPage({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const response = await fetch(`/api/auth/${isRegister ? "sign-up" : "sign-in"}/email`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-client-timezone": timeZone },
       body: JSON.stringify(isRegister ? { name, email, password } : { email, password }),
     });
     if (!response.ok) {

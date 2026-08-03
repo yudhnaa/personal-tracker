@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
-import { todos } from "@/db/schema";
-import { getTodos, purgeDoneTodos, replaceTodos } from "@/lib/dashboard-data";
+import { googleCalendarConnections, todos } from "@/db/schema";
+import { getTodos, getVisibleTodos, purgeDoneTodos, replaceVisibleTodos, toTask } from "@/lib/dashboard-data";
 import { parseJson, taskDraftSchema, taskSchema } from "@/lib/dashboard-validation";
 import { createId } from "@/lib/id";
 import { requireUserId, unauthorized } from "@/lib/session";
 import type { Task } from "@/features/todo/task-types";
-import { type GoogleCalendarEventDraft } from "@/lib/google-calendar";
 import { googleCalendarQueue } from "@/lib/queue/google-calendar-queue";
-
-
 
 export async function GET(request: NextRequest) {
   const userId = await requireUserId();
@@ -24,7 +21,7 @@ export async function GET(request: NextRequest) {
     ).length;
     return NextResponse.json({ count });
   }
-  return NextResponse.json(await getTodos(userId));
+  return NextResponse.json(await getVisibleTodos(userId));
 }
 
 export async function POST(request: NextRequest) {
@@ -36,11 +33,18 @@ export async function POST(request: NextRequest) {
   const current = await getTodos(userId);
   const task: Task = { ...body, doneAt: body.doneAt ?? undefined, id: createId(), createdAt: Date.now() };
 
-  if (task.googleCalendarId && !task.googleEventId) {
+  if (task.googleCalendarAccountId && task.googleCalendarId && task.googleEventId) {
+    const existing = await findExistingGoogleEventTask(userId, task);
+    if (existing) return NextResponse.json(toTask(existing));
+  }
+
+  const hasExternalGoogleEvent = Boolean(task.googleCalendarAccountId && task.googleCalendarId && task.googleEventId);
+
+  if (task.googleCalendarConnectionId && task.googleCalendarId && !task.googleEventId) {
     task.syncStatus = "pending_sync";
   }
 
-  await db.insert(todos).values({
+  const insertValues = {
     id: task.id,
     userId,
     title: task.title,
@@ -57,13 +61,39 @@ export async function POST(request: NextRequest) {
     endAt: task.endAt ?? null,
     allDay: task.allDay ?? false,
     location: task.location ?? "",
+    googleCalendarConnectionId: task.googleCalendarConnectionId ?? null,
+    googleCalendarAccountId: task.googleCalendarAccountId ?? null,
     googleCalendarId: task.googleCalendarId ?? null,
     googleEventId: task.googleEventId ?? null,
     googleEventLink: task.googleEventLink ?? null,
     googleEventPayload: task.googleEventPayload ?? null,
-  });
+  };
 
-  if (task.googleCalendarId && !task.googleEventId) {
+  if (hasExternalGoogleEvent) {
+    await db
+      .insert(todos)
+      .values(insertValues)
+      .onConflictDoNothing({
+        target: [todos.userId, todos.googleCalendarAccountId, todos.googleCalendarId, todos.googleEventId],
+      });
+    const [stored] = await db
+      .select()
+      .from(todos)
+      .where(
+        and(
+          eq(todos.userId, userId),
+          eq(todos.googleCalendarAccountId, task.googleCalendarAccountId!),
+          eq(todos.googleCalendarId, task.googleCalendarId!),
+          eq(todos.googleEventId, task.googleEventId!),
+        ),
+      )
+      .limit(1);
+    if (stored) return NextResponse.json(toTask(stored), { status: stored.id === task.id ? 201 : 200 });
+  } else {
+    await db.insert(todos).values(insertValues);
+  }
+
+  if (task.googleCalendarConnectionId && task.googleCalendarId && !task.googleEventId) {
     try {
       await googleCalendarQueue.add("createEvent", {
         type: "createEvent",
@@ -80,13 +110,94 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(task, { status: 201 });
 }
 
+async function findExistingGoogleEventTask(userId: string, task: Task) {
+  if (!task.googleCalendarAccountId || !task.googleCalendarId || !task.googleEventId) return null;
+
+  return db.transaction(async (tx) => {
+    const [connection] = task.googleCalendarConnectionId
+      ? await tx
+          .select({
+            id: googleCalendarConnections.id,
+            googleEmail: googleCalendarConnections.googleEmail,
+          })
+          .from(googleCalendarConnections)
+          .where(
+            and(
+              eq(googleCalendarConnections.userId, userId),
+              eq(googleCalendarConnections.id, task.googleCalendarConnectionId),
+            ),
+          )
+          .limit(1)
+      : [];
+    const legacyEmail = connection?.googleEmail && connection.googleEmail !== task.googleCalendarAccountId
+      ? connection.googleEmail
+      : null;
+    const calendarAliases = googleCalendarIdAliases(connection?.googleEmail, task.googleCalendarId!);
+    const accountFilter = or(
+      eq(todos.googleCalendarAccountId, task.googleCalendarAccountId!),
+      ...(legacyEmail ? [eq(todos.googleCalendarAccountId, legacyEmail)] : []),
+      isNull(todos.googleCalendarAccountId),
+    );
+    const matches = await tx
+      .select()
+      .from(todos)
+      .where(
+        and(
+          eq(todos.userId, userId),
+          calendarAliases.length === 1
+            ? eq(todos.googleCalendarId, calendarAliases[0])
+            : or(...calendarAliases.map((alias) => eq(todos.googleCalendarId, alias))),
+          eq(todos.googleEventId, task.googleEventId!),
+          accountFilter,
+        ),
+      )
+      .orderBy(asc(todos.createdAt));
+    const canonical = matches[0];
+    if (!canonical) return null;
+
+    for (const duplicate of matches.slice(1)) {
+      await tx.delete(todos).where(and(eq(todos.userId, userId), eq(todos.id, duplicate.id)));
+    }
+
+    const [adopted] = await tx
+      .update(todos)
+      .set({
+        googleCalendarConnectionId: task.googleCalendarConnectionId ?? canonical.googleCalendarConnectionId,
+        googleCalendarAccountId: task.googleCalendarAccountId,
+        googleCalendarId: canonicalGoogleCalendarId(connection?.googleEmail, task.googleCalendarId!),
+        source: "google",
+        syncStatus: canonical.syncStatus === "local_only" ? "synced" : canonical.syncStatus,
+      })
+      .where(and(eq(todos.userId, userId), eq(todos.id, canonical.id)))
+      .returning();
+    return adopted ?? canonical;
+  });
+}
+
+function hasGoogleEmail(googleEmail: string | null | undefined) {
+  return Boolean(googleEmail && googleEmail !== "Google Calendar");
+}
+
+function canonicalGoogleCalendarId(googleEmail: string | null | undefined, calendarId: string) {
+  return calendarId === "primary" && hasGoogleEmail(googleEmail) ? googleEmail! : calendarId;
+}
+
+function googleCalendarIdAliases(googleEmail: string | null | undefined, calendarId: string) {
+  const aliases = [calendarId];
+  if (hasGoogleEmail(googleEmail)) {
+    if (calendarId === "primary") aliases.push(googleEmail!);
+    if (calendarId === googleEmail) aliases.push("primary");
+  }
+  return Array.from(new Set(aliases));
+}
+
 export async function PUT(request: NextRequest) {
   const userId = await requireUserId();
   if (!userId) return unauthorized();
   const parsed = await parseJson(request, taskSchema.array());
   if ("response" in parsed) return parsed.response;
   const tasks = parsed.data.map(t => ({ ...t, doneAt: t.doneAt ?? undefined }));
-  return NextResponse.json(await replaceTodos(userId, tasks as Task[]));
+  return NextResponse.json(await replaceVisibleTodos(userId, tasks as Task[]));
 }
 
 export async function DELETE(request: NextRequest) {

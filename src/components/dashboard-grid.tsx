@@ -13,10 +13,14 @@ interface DashboardGridProps {
 const MIN_SIZES: Record<string, { minW: number; minH: number }> = {
 	todo: { minW: 4, minH: 12 },
 	pomodoro: { minW: 3, minH: 11 },
-	notes: { minW: 3, minH: 10 },
 	bookmarks: { minW: 3, minH: 8 },
 	habits: { minW: 3, minH: 8 },
 };
+
+function minSizeFor(id: string) {
+	if (id.startsWith("note:")) return { minW: 3, minH: 10 };
+	return MIN_SIZES[id] || { minW: 3, minH: 8 };
+}
 
 export function DashboardGrid({
 	activeLayout,
@@ -34,7 +38,7 @@ export function DashboardGrid({
 
 	const safeLayout = layoutItems.map((item: any) => ({
 		...item,
-		...(MIN_SIZES[item.i] || { minW: 3, minH: 8 }),
+		...minSizeFor(item.i),
 	}));
 
 	return (

@@ -43,6 +43,27 @@
       "when": 1781851489149,
       "tag": "0005_safe_khan",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785715200000,
+      "tag": "0006_multi_notes_timezones_calendar_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785739435949,
+      "tag": "0007_sad_random",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785743000000,
+      "tag": "0008_adopt_legacy_google_event_tasks",
+      "breakpoints": true
     }
   ]
 }

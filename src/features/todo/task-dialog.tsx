@@ -14,6 +14,8 @@ export type ItemType = "task" | "event";
 
 export type ItemDialogDraft = TaskDraft & {
   type: ItemType;
+  googleCalendarConnectionId?: string;
+  googleCalendarAccountId?: string;
   googleCalendarId?: string;
 };
 
@@ -36,6 +38,8 @@ const EMPTY: ItemDialogDraft = {
   dueDate: "",
   status: "todo",
   checklist: [],
+  googleCalendarConnectionId: "",
+  googleCalendarAccountId: "",
   googleCalendarId: "",
   startAt: "",
   endAt: "",
@@ -62,7 +66,7 @@ export function TaskDialog({
 
   useEffect(() => {
     if (!open) return;
-    const firstCalendarId = enabledGoogleCalendars[0]?.id ?? "";
+    const firstCalendar = enabledGoogleCalendars[0];
     const now = new Date();
     const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
     
@@ -75,7 +79,9 @@ export function TaskDialog({
             dueDate: task.dueDate,
             status: task.status,
             checklist: task.checklist ?? [],
-            googleCalendarId: task.googleCalendarId || (task.dueDate ? firstCalendarId : ""),
+            googleCalendarConnectionId: task.googleCalendarConnectionId || (task.dueDate ? firstCalendar?.connectionId ?? "" : ""),
+            googleCalendarAccountId: task.googleCalendarAccountId || (task.dueDate ? firstCalendar?.googleAccountId ?? "" : ""),
+            googleCalendarId: task.googleCalendarId || (task.dueDate ? firstCalendar?.id ?? "" : ""),
             startAt: task.startAt ?? "",
             endAt: task.endAt ?? "",
             allDay: task.allDay ?? false,
@@ -84,6 +90,8 @@ export function TaskDialog({
         : {
             ...EMPTY,
             type: defaultType,
+            googleCalendarConnectionId: "",
+            googleCalendarAccountId: "",
             googleCalendarId: "",
             startAt: now.toISOString(),
             endAt: oneHourLater.toISOString(),
@@ -96,14 +104,19 @@ export function TaskDialog({
 
   function submit() {
     if (!draft.title.trim()) return;
-    if (draft.type === "event" && !draft.googleCalendarId) return; // Events require a calendar
+    if (draft.type === "event" && (!draft.googleCalendarConnectionId || !draft.googleCalendarId)) return;
     if (draft.type === "event" && (!draft.startAt || !draft.endAt)) {
       alert("Start and End times are required for events.");
       return;
     }
+    const selectedCalendar = enabledGoogleCalendars.find(
+      (calendar) => calendar.connectionId === draft.googleCalendarConnectionId && calendar.id === draft.googleCalendarId,
+    );
     void onSubmit({
       ...draft,
       title: draft.title.trim(),
+      googleCalendarConnectionId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarConnectionId : undefined,
+      googleCalendarAccountId: (draft.startAt || draft.dueDate || draft.type === "event") ? selectedCalendar?.googleAccountId ?? draft.googleCalendarAccountId : undefined,
       googleCalendarId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarId : undefined,
     });
     onClose();
@@ -126,7 +139,13 @@ export function TaskDialog({
       {googleCalendarConnected && (
         <button
           type="button"
-          onClick={() => setDraft((d) => ({ ...d, type: "event", googleCalendarId: d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" }))}
+          onClick={() => setDraft((d) => ({
+            ...d,
+            type: "event",
+            googleCalendarConnectionId: d.googleCalendarConnectionId || enabledGoogleCalendars[0]?.connectionId || "",
+            googleCalendarAccountId: d.googleCalendarAccountId || enabledGoogleCalendars[0]?.googleAccountId || "",
+            googleCalendarId: d.googleCalendarId || enabledGoogleCalendars[0]?.id || "",
+          }))}
           className={cn(
             "flex-1 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
             isEvent ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
@@ -215,7 +234,9 @@ export function TaskDialog({
                       ...d,
                       startAt: iso,
                       dueDate: iso,
-                      googleCalendarId: iso ? d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" : "",
+                    googleCalendarConnectionId: iso ? d.googleCalendarConnectionId || enabledGoogleCalendars[0]?.connectionId || "" : "",
+                    googleCalendarAccountId: iso ? d.googleCalendarAccountId || enabledGoogleCalendars[0]?.googleAccountId || "" : "",
+                    googleCalendarId: iso ? d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" : "",
                     }))
                   }
                   placeholder={t.dialog.startDatePlaceholder}
@@ -241,7 +262,9 @@ export function TaskDialog({
                       ...d,
                       startAt: iso,
                       dueDate: iso ? iso.slice(0, 10) : "",
-                      googleCalendarId: iso ? d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" : "",
+                    googleCalendarConnectionId: iso ? d.googleCalendarConnectionId || enabledGoogleCalendars[0]?.connectionId || "" : "",
+                    googleCalendarAccountId: iso ? d.googleCalendarAccountId || enabledGoogleCalendars[0]?.googleAccountId || "" : "",
+                    googleCalendarId: iso ? d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" : "",
                     }));
                   }}
                   className="w-full flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
@@ -271,14 +294,24 @@ export function TaskDialog({
             </p>
             {enabledGoogleCalendars.length ? (
               <select
-                value={draft.googleCalendarId ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, googleCalendarId: e.target.value }))}
+                value={calendarSelectValue(draft.googleCalendarConnectionId, draft.googleCalendarId)}
+                onChange={(e) => {
+                const selected = parseCalendarSelectValue(e.target.value);
+                setDraft((d) => ({
+                  ...d,
+                  googleCalendarConnectionId: selected.connectionId,
+                  googleCalendarAccountId: enabledGoogleCalendars.find(
+                    (calendar) => calendar.connectionId === selected.connectionId && calendar.id === selected.calendarId,
+                  )?.googleAccountId ?? "",
+                  googleCalendarId: selected.calendarId,
+                }));
+                }}
                 className="w-full rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
               >
                 {!isEvent && <option value="">{t.dialog.localOnlyOption}</option>}
                 {enabledGoogleCalendars.map((calendar) => (
-                  <option key={calendar.id} value={calendar.id}>
-                    {calendar.summary}
+                  <option key={`${calendar.connectionId}:${calendar.id}`} value={calendarSelectValue(calendar.connectionId, calendar.id)}>
+                    {calendar.googleEmail} - {calendar.summary}
                   </option>
                 ))}
               </select>
@@ -332,7 +365,7 @@ export function TaskDialog({
         <button
           type="button"
           onClick={submit}
-          disabled={isEvent && !draft.googleCalendarId}
+          disabled={isEvent && (!draft.googleCalendarConnectionId || !draft.googleCalendarId)}
           className="w-full rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90 disabled:opacity-50"
         >
           {t.dialog.submit}
@@ -340,4 +373,18 @@ export function TaskDialog({
       </div>
     </Modal>
   );
+}
+
+function calendarSelectValue(connectionId?: string, calendarId?: string) {
+  if (!connectionId || !calendarId) return "";
+  return `${encodeURIComponent(connectionId)}:${encodeURIComponent(calendarId)}`;
+}
+
+function parseCalendarSelectValue(value: string) {
+  if (!value) return { connectionId: "", calendarId: "" };
+  const [connectionId = "", calendarId = ""] = value.split(":");
+  return {
+    connectionId: decodeURIComponent(connectionId),
+    calendarId: decodeURIComponent(calendarId),
+  };
 }

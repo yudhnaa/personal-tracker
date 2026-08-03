@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -14,8 +14,9 @@ export async function GET() {
   return NextResponse.json(await getGoogleCalendarConnectionStatus(userId));
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const userId = await requireUserId();
   if (!userId) return unauthorized();
-  return NextResponse.json(await disconnectGoogleCalendar(userId));
+  const connectionId = request.nextUrl.searchParams.get("connectionId") ?? undefined;
+  return NextResponse.json(await disconnectGoogleCalendar(userId, connectionId));
 }

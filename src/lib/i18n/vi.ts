@@ -81,6 +81,7 @@ export const vi: Messages = {
 				description:
 					"Kết nối Google Calendar để hiển thị sự kiện từ các lịch đã chọn trong lịch Todo.",
 				connect: "Kết nối Google Calendar",
+				connectAnother: "Kết nối thêm tài khoản Google",
 				reconnect: "Kết nối lại Google Calendar",
 				connected: "Tài khoản đã kết nối",
 				unknownAccount: "Tài khoản Google",
@@ -144,8 +145,14 @@ export const vi: Messages = {
 		},
 		notes: {
 			title: "Ghi chú",
+			addNote: "Thêm ghi chú",
+			titleLabel: "Tiêu đề ghi chú",
 			wordCount: (count: number) => `${count} từ`,
 			placeholder: "Note nhanh vài dòng ở đây, tự động lưu lại...",
+			deleteTooltip: "Xoá ghi chú",
+			deleteTitle: (title: string) => `Xoá "${title}"?`,
+			deleteMessage: "Ghi chú này sẽ bị xoá vĩnh viễn.",
+			deleteConfirm: "Xoá",
 		},
 		pomodoro: {
 			title: "Pomodoro",
@@ -232,6 +239,7 @@ export const vi: Messages = {
 				linkedTask: "Đã liên kết",
 				allDay: "Cả ngày",
 				convertToTask: "Chuyển thành task",
+				convertAllEventsToTasks: "Chuyển tất cả thành task",
 				eventDialog: {
 					addTitle: "Thêm sự kiện Google Calendar",
 					editTitle: "Sửa sự kiện Google Calendar",

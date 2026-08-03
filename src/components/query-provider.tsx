@@ -54,6 +54,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       client={queryClient}
       persistOptions={{
         persister,
+        buster: "multi-notes-timezone-calendar-v2",
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {

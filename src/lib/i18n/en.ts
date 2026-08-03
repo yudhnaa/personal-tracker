@@ -73,6 +73,7 @@ export const en = {
 				description:
 					"Connect Google Calendar to show selected calendar events in the Todo calendar view.",
 				connect: "Connect Google Calendar",
+				connectAnother: "Connect another Google account",
 				reconnect: "Reconnect Google Calendar",
 				connected: "Connected account",
 				unknownAccount: "Google account",
@@ -136,8 +137,14 @@ export const en = {
 		},
 		notes: {
 			title: "Notes",
+			addNote: "Add note",
+			titleLabel: "Note title",
 			wordCount: (count: number) => `${count} ${count === 1 ? "word" : "words"}`,
 			placeholder: "Write quick notes here, automatically saved...",
+			deleteTooltip: "Delete note",
+			deleteTitle: (title: string) => `Delete "${title}"?`,
+			deleteMessage: "This note will be deleted permanently.",
+			deleteConfirm: "Delete",
 		},
 		pomodoro: {
 			title: "Pomodoro",
@@ -224,6 +231,7 @@ export const en = {
 				linkedTask: "Google Linked",
 				allDay: "All day",
 				convertToTask: "Convert to task",
+				convertAllEventsToTasks: "Convert all events to tasks",
 				eventDialog: {
 					addTitle: "Add Google Calendar event",
 					editTitle: "Edit Google Calendar event",

@@ -21,6 +21,8 @@ export const taskDraftSchema = z.object({
   endAt: z.string().max(32).optional(),
   allDay: z.boolean().default(false),
   location: z.string().max(1000).optional(),
+  googleCalendarConnectionId: z.string().max(255).optional(),
+  googleCalendarAccountId: z.string().max(255).optional(),
   googleCalendarId: z.string().max(255).optional(),
   googleEventId: z.string().max(1024).optional(),
   googleEventLink: z.string().url().max(2048).optional(),
@@ -83,9 +85,15 @@ export const habitCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
-export const notePatchSchema = z.object({
+export const noteCreateSchema = z.object({
+  title: z.string().trim().min(1).max(120).default("Note"),
   text: z.string().max(50000).default(""),
 });
+
+export const notePatchSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  text: z.string().max(50000).default(""),
+}).partial();
 
 export const welcomePatchSchema = z.object({
   welcomed: z.boolean(),
