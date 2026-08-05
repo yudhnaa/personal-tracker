@@ -7,12 +7,19 @@ import {
   habitCompletions,
   habits,
   notes,
+  subscriptions,
   todos,
   user,
 } from "@/db/schema";
 import { createId } from "./id";
 import { DEFAULT_SETTINGS, type Settings } from "./settings";
-import { startOfTodayInTimeZoneMs } from "./timezone";
+import { startOfTodayInTimeZoneMs, todayIsoInTimeZone } from "./timezone";
+import {
+  sortSubscriptionsForToday,
+  subscriptionStatus,
+  type BillingCycle,
+  type Subscription,
+} from "./subscription-utils";
 import type { Bookmark } from "@/features/bookmarks/use-bookmarks";
 import type { Habit } from "@/features/habits/use-habits";
 import type { Task, TaskSource, TaskSyncStatus } from "@/features/todo/task-types";
@@ -351,6 +358,32 @@ export async function getHabits(userId: string): Promise<Habit[]> {
     name: habit.name,
     done: doneByHabit.get(habit.id) ?? [],
   }));
+}
+
+export function toSubscription(
+  row: typeof subscriptions.$inferSelect,
+  todayIso: string,
+): Subscription {
+  return {
+    id: row.id,
+    name: row.name,
+    amount: row.amountCents / 100,
+    billingCycle: row.billingCycle as BillingCycle,
+    nextRenewalDate: row.nextRenewalDate,
+    lastPaymentDate: row.lastPaymentDate ?? null,
+    status: subscriptionStatus(row.nextRenewalDate, todayIso),
+  };
+}
+
+export async function getSubscriptions(userId: string): Promise<Subscription[]> {
+  const timeZone = await getUserTimeZone(userId);
+  const todayIso = todayIsoInTimeZone(timeZone);
+  const rows = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .orderBy(asc(subscriptions.nextRenewalDate), asc(subscriptions.createdAt));
+  return sortSubscriptionsForToday(rows.map((row) => toSubscription(row, todayIso)), todayIso);
 }
 
 export async function purgeDoneTodos(userId: string, days: number) {

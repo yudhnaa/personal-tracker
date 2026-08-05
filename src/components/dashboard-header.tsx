@@ -47,13 +47,14 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
 	const t = messages[locale];
 
-	const cardNames: Record<string, string> = {
-		todo: "Todo",
-		pomodoro: "Pomodoro",
-		notes: "Notes",
-		bookmarks: "Bookmarks",
-		habits: "Habits",
-	};
+		const cardNames: Record<string, string> = {
+			todo: "Todo",
+			pomodoro: "Pomodoro",
+			notes: "Notes",
+			bookmarks: "Bookmarks",
+			habits: "Habits",
+			subscriptions: messages[locale].features.subscriptions.title,
+		};
 
 	return (
 		<header className="flex shrink-0 items-center justify-between gap-3 rounded-[var(--radius-card)] bg-surface px-4 py-2">

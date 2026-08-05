@@ -64,6 +64,20 @@
       "when": 1785743000000,
       "tag": "0008_adopt_legacy_google_event_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785895306586,
+      "tag": "0009_cynical_bloodstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785899000000,
+      "tag": "0010_repair_subscription_confirmation_idempotency",
+      "breakpoints": true
     }
   ]
 }

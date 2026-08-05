@@ -85,6 +85,19 @@ export const habitCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
+const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isValidIsoDate, "Invalid date");
+
+export const subscriptionCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  amount: z.number().finite().nonnegative().max(100000000),
+  billingCycle: z.enum(["monthly", "yearly"]),
+  nextRenewalDate: isoDateSchema,
+  lastPaymentDate: isoDateSchema.optional().nullable(),
+});
+
 export const noteCreateSchema = z.object({
   title: z.string().trim().min(1).max(120).default("Note"),
   text: z.string().max(50000).default(""),
@@ -122,4 +135,15 @@ export async function parseJson<T extends z.ZodType>(
   const parsed = schema.safeParse(body);
   if (!parsed.success) return { response: validationError(parsed.error) };
   return { data: parsed.data };
+}
+
+function isValidIsoDate(value: string) {
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1) return false;
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

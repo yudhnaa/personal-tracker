@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "npm run typecheck && next build",
     "preview": "next start",
+    "test:subscriptions": "node --test scripts/test-subscriptions.mjs",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

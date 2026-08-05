@@ -2,6 +2,7 @@ import { toIsoDate } from "./date";
 import { createId } from "./id";
 import type { Bookmark } from "../features/bookmarks/use-bookmarks";
 import type { Habit } from "../features/habits/use-habits";
+import type { BillingCycle } from "../features/subscriptions/use-subscriptions";
 import type { Task, TaskStatus } from "../features/todo/task-types";
 
 function isoInDays(days: number): string {
@@ -91,6 +92,42 @@ export function buildHabits(): Habit[] {
     { id: createId(), name: "Uống đủ nước", done: [0, -1, -2, -3].map(isoInDays) },
     { id: createId(), name: "Đọc sách 20 phút", done: [-1, -2, -4].map(isoInDays) },
     { id: createId(), name: "Tập thể dục", done: [0, -1].map(isoInDays) },
+  ];
+}
+
+export function buildSubscriptions(): Array<{
+  id: string;
+  name: string;
+  amount: number;
+  billingCycle: BillingCycle;
+  nextRenewalDate: string;
+  lastPaymentDate: string | null;
+}> {
+  return [
+    {
+      id: createId(),
+      name: "Netflix",
+      amount: 260000,
+      billingCycle: "monthly",
+      nextRenewalDate: isoInDays(-2),
+      lastPaymentDate: isoInDays(-32),
+    },
+    {
+      id: createId(),
+      name: "iCloud",
+      amount: 19000,
+      billingCycle: "monthly",
+      nextRenewalDate: isoInDays(2),
+      lastPaymentDate: isoInDays(-28),
+    },
+    {
+      id: createId(),
+      name: "Domain renewal",
+      amount: 320000,
+      billingCycle: "yearly",
+      nextRenewalDate: isoInDays(20),
+      lastPaymentDate: isoInDays(-345),
+    },
   ];
 }
 

@@ -15,6 +15,7 @@ const MIN_SIZES: Record<string, { minW: number; minH: number }> = {
 	pomodoro: { minW: 3, minH: 11 },
 	bookmarks: { minW: 3, minH: 8 },
 	habits: { minW: 3, minH: 8 },
+	subscriptions: { minW: 3, minH: 10 },
 };
 
 function minSizeFor(id: string) {

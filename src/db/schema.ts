@@ -2,6 +2,7 @@ import {
   boolean,
   bigint,
   integer,
+  index,
   pgTable,
   primaryKey,
   text,
@@ -133,6 +134,45 @@ export const habits = pgTable("habits", {
   name: text("name").notNull(),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    billingCycle: text("billing_cycle").notNull(),
+    nextRenewalDate: text("next_renewal_date").notNull(),
+    lastPaymentDate: text("last_payment_date"),
+    confirmedRenewalDate: text("confirmed_renewal_date"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [index("subscriptions_user_next_renewal_idx").on(table.userId, table.nextRenewalDate)],
+);
+
+export const subscriptionPaymentConfirmations = pgTable(
+  "subscription_payment_confirmations",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    subscriptionId: text("subscription_id").notNull().references(() => subscriptions.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("subscription_payment_confirmations_user_subscription_idx").on(
+      table.userId,
+      table.subscriptionId,
+    ),
+    uniqueIndex("subscription_payment_confirmations_idempotency_idx").on(
+      table.userId,
+      table.subscriptionId,
+      table.idempotencyKey,
+    ),
+  ],
+);
 
 export const habitCompletions = pgTable(
   "habit_completions",

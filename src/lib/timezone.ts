@@ -16,6 +16,14 @@ export function startOfTodayInTimeZoneMs(timeZone: string, now = new Date()) {
   return zonedDateTimeToUtcMs(parts.year, parts.month, parts.day, zone);
 }
 
+export function todayIsoInTimeZone(timeZone: string, now = new Date()) {
+  const zone = normalizeTimeZone(timeZone);
+  const parts = datePartsInTimeZone(now, zone);
+  const month = String(parts.month).padStart(2, "0");
+  const day = String(parts.day).padStart(2, "0");
+  return `${parts.year}-${month}-${day}`;
+}
+
 function zonedDateTimeToUtcMs(year: number, month: number, day: number, timeZone: string) {
   let utc = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
   for (let i = 0; i < 2; i++) {

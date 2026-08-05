@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
       { i: "notes", x: 8, y: 12, w: 4, h: 18 },
       { i: "bookmarks", x: 0, y: 18, w: 4, h: 12 },
       { i: "habits", x: 4, y: 18, w: 4, h: 12 },
+      { i: "subscriptions", x: 8, y: 30, w: 4, h: 12 },
     ],
   },
   hiddenCards: [],

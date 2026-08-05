@@ -20,6 +20,7 @@ import { HabitCard } from "./features/habits/habit-card";
 import { NotesCard } from "./features/notes/notes-card";
 import { useNotes } from "./features/notes/use-notes";
 import { PomodoroCard } from "./features/pomodoro/pomodoro-card";
+import { SubscriptionCard } from "./features/subscriptions/subscription-card";
 import { TodoCard } from "./features/todo/todo-card";
 import { messages, type Locale } from "./lib/i18n";
 import { useGoogleCalendar } from "./features/google-calendar/use-google-calendar";
@@ -169,6 +170,13 @@ export function App({
 				onHide={() => handleHideCard("habits")}
 			/>
 		),
+		subscriptions: (
+			<SubscriptionCard
+				className="h-full"
+				editMode={editMode && isDesktop}
+				onHide={() => handleHideCard("subscriptions")}
+			/>
+		),
 	};
 
 	for (const note of notes) {
@@ -242,6 +250,7 @@ export function App({
 						</div>
 						<div className="min-h-[320px]">{cards.bookmarks}</div>
 						<div className="min-h-[320px]">{cards.habits}</div>
+						<div className="min-h-[360px]">{cards.subscriptions}</div>
 					</motion.div>
 				)}
 			</div>
@@ -296,6 +305,12 @@ function normalizeLayoutForNotes(layout: Record<string, any> | null, noteIds: st
 		if (normalized.some((item) => item.i === cardId)) continue;
 		const y = normalized.reduce((max, item) => Math.max(max, (item.y ?? 0) + (item.h ?? 8)), 0);
 		normalized.push({ i: cardId, x: 8, y, w: 4, h: 18, minW: 3, minH: 10 });
+	}
+
+	for (const item of DEFAULT_SETTINGS.layout?.lg ?? []) {
+		if (item.i === "notes" || normalized.some((existing) => existing.i === item.i)) continue;
+		const y = normalized.reduce((max, existing) => Math.max(max, (existing.y ?? 0) + (existing.h ?? 8)), 0);
+		normalized.push({ ...item, y });
 	}
 
 	return { ...source, lg: normalized };
