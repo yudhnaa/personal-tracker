@@ -79,20 +79,61 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
 
     steps:
+      - name: Resolve DDNS hostname to IPv4
+        id: resolve-server
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_IP }}
+        run: |
+          set -euo pipefail
+          echo "Resolving hostname: $SERVER_HOST"
+          if ! RESOLVED_IP="$(
+            getent ahostsv4 "$SERVER_HOST" |
+            awk 'NR == 1 { print $1 }'
+          )"; then
+            echo "::error::Unable to resolve $SERVER_HOST to IPv4"
+            exit 1
+          fi
+
+          if [ -z "$RESOLVED_IP" ]; then
+            echo "::error::DNS returned no IPv4 address for $SERVER_HOST"
+            exit 1
+          fi
+
+          echo "Resolved IPv4: $RESOLVED_IP"
+          echo "ip=$RESOLVED_IP" >> "$GITHUB_OUTPUT"
+
+      - name: Test SSH port
+        shell: bash
+        env:
+          SERVER_IP: ${{ steps.resolve-server.outputs.ip }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: |
+          set -euo pipefail
+          echo "Testing $SERVER_IP:$SERVER_PORT"
+          if ! timeout 10 bash -c \
+            "cat < /dev/null > /dev/tcp/$SERVER_IP/$SERVER_PORT"; then
+            echo "::error::Unable to connect to $SERVER_IP:$SERVER_PORT"
+            exit 1
+          fi
+          echo "SSH port is reachable"
+
       - name: Execute SSH commands on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_IP }}
+          host: ${{ steps.resolve-server.outputs.ip }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          timeout: 30s
+          command_timeout: 10m
           script: |
-            # Login to GitHub Container Registry on server
-            echo "${{ secrets.PAT_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
-            
-            # Go to your project directory
-            cd ${{ secrets.SERVER_PROJECT_PATH }}
-            
-            # Pull the latest images and restart containers
+            set -e
+            echo "${{ secrets.PAT_TOKEN }}" \
+              | docker login ${{ env.REGISTRY }} \
+                  -u "${{ github.actor }}" \
+                  --password-stdin
+            cd "${{ secrets.SERVER_PROJECT_PATH }}"
+
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
