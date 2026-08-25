@@ -12,6 +12,16 @@ dist
 *.log
 npm-debug.log*
 .gitnexus
+.agents
+.claude
+.codex
+.knowns
+.vscode
+
+AGENTS.md
+CLAUDE.md
+DESIGN.md
+KNOWNS.md
 
 # Environment variables
 .env

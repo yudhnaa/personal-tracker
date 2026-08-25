@@ -27,9 +27,11 @@ async function tryProxy(
   parse: (text: string) => string,
   signal?: AbortSignal,
 ): Promise<string> {
+  if (signal?.aborted) return "";
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 7000);
-  signal?.addEventListener("abort", () => controller.abort());
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
   try {
     const res = await fetch(endpoint, { signal: controller.signal });
     if (!res.ok) return "";
@@ -37,6 +39,7 @@ async function tryProxy(
   } catch {
     return "";
   } finally {
+    signal?.removeEventListener("abort", abort);
     window.clearTimeout(timeout);
   }
 }

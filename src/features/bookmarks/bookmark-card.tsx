@@ -1,4 +1,5 @@
 import { Bookmark as BookmarkIcon, Plus, Settings2, X } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 import { BentoCard } from "../../components/bento-card";
 import { useConfirm } from "../../components/confirm-dialog";
@@ -117,11 +118,13 @@ export function BookmarkCard({
                   rel="noreferrer"
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  <img
+                  <Image
                     src={faviconUrl(b.url)}
                     alt=""
                     width={20}
                     height={20}
+                    loader={({ src }) => src}
+                    unoptimized
                     className="h-5 w-5 shrink-0 rounded"
                     onError={(e) => {
                       e.currentTarget.style.visibility = "hidden";

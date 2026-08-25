@@ -7,8 +7,24 @@ export const vi: Messages = {
 		register: "Tạo tài khoản",
 		account: "Tài khoản",
 	},
-	dashboard: { settings: "Cài đặt" },
+	dashboard: {
+		settings: "Cài đặt",
+		editLayout: "Sửa bố cục",
+		cancelLayout: "Huỷ",
+		saveLayout: "Lưu bố cục",
+		hiddenCards: (count: number) => `Thẻ đã ẩn (${count})`,
+		restoreCards: "Khôi phục thẻ",
+		cardNames: {
+			todo: "Todo",
+			pomodoro: "Pomodoro",
+			notes: "Ghi chú",
+			bookmarks: "Bookmark",
+			habits: "Thói quen",
+			subscriptions: "Gói định kỳ",
+		},
+	},
 	components: {
+		bentoCard: { hideCard: "Ẩn thẻ" },
 		modal: { fallbackTitle: "Hộp thoại", close: "Đóng" },
 		confirm: { cancel: "Huỷ", confirm: "Xác nhận" },
 		languageSwitcher: { en: "Tiếng Anh", vi: "Tiếng Việt" },
@@ -20,12 +36,7 @@ export const vi: Messages = {
 		welcome: {
 			title: "Chào mừng đến với board!",
 			intro:
-				"Đây là không gian cá nhân của bạn - mọi thứ lưu ngay trên trình duyệt này, không gửi đi đâu, không cần đăng nhập.",
-			sampleData: "Board đang có data mẫu.",
-			sampleAction:
-				"Hãy mở Cài đặt và chọn Xoá data để bắt đầu với board trống của riêng mình.",
-			settingsLabel: "Cài đặt",
-			deleteDataLabel: "Xoá data",
+				"Đây là không gian riêng của bạn. Task, ghi chú, bookmark, thói quen và cài đặt được lưu theo tài khoản.",
 			start: "Bắt đầu khám phá",
 		},
 		settings: {
@@ -41,20 +52,12 @@ export const vi: Messages = {
 			autoArchive: "Tự ẩn task đã xong cũ hơn",
 			purgeOlder: "Xoá hẳn task đã xong cũ hơn",
 			purgeButton: "Xoá",
-			deleteAll: "Xoá toàn bộ",
-			sampleData: "Tạo data mẫu",
 			noTasksTitle: "Không có task để dọn",
 			noTasksMessage: (days: number) =>
 				`Chưa có task đã xong nào cũ hơn ${days} ngày.`,
 			purgeTitle: (count: number) => `Xoá ${count} task đã xong?`,
 			purgeMessage: (days: number) =>
 				`Các task đã xong cũ hơn ${days} ngày sẽ bị xoá vĩnh viễn. Task chưa xong không bị ảnh hưởng.`,
-			deleteAllTitle: "Xoá toàn bộ dữ liệu?",
-			deleteAllMessage:
-				"Tất cả task, ghi chú, bookmark sẽ bị xoá. Cài đặt giao diện được giữ lại.",
-			sampleTitle: "Tạo dữ liệu mẫu?",
-			sampleMessage:
-				"Thao tác này ghi đè toàn bộ task, ghi chú, bookmark hiện có bằng bộ dữ liệu mẫu.",
 			archiveDays: ["30 ngày", "90 ngày", "180 ngày", "1 năm", "Không ẩn"],
 			purgeDays: ["30 ngày", "90 ngày", "180 ngày", "1 năm"],
 			primaryColors: [
@@ -123,14 +126,13 @@ export const vi: Messages = {
 		resetTitle: "Đặt lại mật khẩu",
 		requestReset: "Gửi link đặt lại",
 		resetEmailSent:
-			"Đã gửi link đặt lại. Hãy kiểm tra hộp thư hoặc link dev bên dưới.",
+			"Nếu có tài khoản đang hoạt động với email này, link đặt lại đã được gửi.",
 		newPassword: "Mật khẩu mới",
 		changePassword: "Đổi mật khẩu",
 		passwordChanged: "Đã cập nhật mật khẩu.",
 		currentPassword: "Mật khẩu hiện tại",
 		profile: "Hồ sơ",
 		logout: "Đăng xuất",
-		devResetLinks: "Link đặt lại trong môi trường dev",
 		resetPasswordSuccess: "Đặt lại mật khẩu thành công.",
 	},
 	features: {
@@ -139,6 +141,7 @@ export const vi: Messages = {
 			empty: "Chưa có thói quen nào.\nThêm một cái bên dưới để bắt đầu.",
 			placeholder: "Thêm thói quen mới...",
 			addTooltip: "Thêm thói quen",
+			saveError: "Không thể lưu thói quen. Vui lòng thử lại.",
 			unmarkTooltip: "Bỏ đánh dấu hôm nay",
 			markTooltip: "Đánh dấu hôm nay",
 			deleteTooltip: "Xoá thói quen",
@@ -223,6 +226,8 @@ export const vi: Messages = {
 				titlePlaceholder: "Tên hiển thị",
 				group: "Nhóm",
 				save: "Lưu lại",
+				saving: "Đang lưu...",
+				saveError: "Không thể lưu bookmark. Vui lòng thử lại.",
 			},
 			manager: {
 				title: "Quản lý nhóm",
@@ -318,6 +323,9 @@ export const vi: Messages = {
 				add: "Thêm việc",
 			},
 			dialog: {
+				taskType: "Task",
+				eventType: "Sự kiện",
+				eventTimesRequired: "Sự kiện cần có giờ bắt đầu và kết thúc.",
 				titleLabel: "Tiêu đề",
 				titlePlaceholder: "Tên task...",
 				dueDateLabel: "Hạn chót",
@@ -338,8 +346,11 @@ export const vi: Messages = {
 				openGoogleCalendar: "Mở trong Google Calendar \u2192",
 				syncToAccessAdvanced: "Đồng bộ task lên Google Calendar trước để sử dụng các trường nâng cao.",
 				submit: "Thêm task",
+				saving: "Đang lưu...",
+				saveError: "Không thể lưu task. Vui lòng thử lại.",
 			},
 			detail: {
+				googleEvent: "Sự kiện Google",
 				title: "Chi tiết task",
 				deleteTitle: "Xoá task?",
 				deleteMessage: (title: string) => `"${title}" sẽ bị xoá vĩnh viễn, không khôi phục được.`,

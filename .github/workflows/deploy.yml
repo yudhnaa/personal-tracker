@@ -34,6 +34,17 @@ jobs:
       - name: Run Typecheck
         run: npm run typecheck
 
+      - name: Run Lint
+        run: npm run lint
+
+      - name: Run Regression Tests
+        run: npm run test:api-client && npm run test:subscriptions
+
+      - name: Run Production Build
+        env:
+          NEXT_PUBLIC_API_GATEWAY_URL: http://localhost:8080
+        run: npm run build
+
   build-and-push:
     name: Build & Push Docker Image
     needs: lint-and-typecheck
@@ -64,11 +75,28 @@ jobs:
             type=sha,format=long
             type=raw,value=latest
 
+      - name: Validate production Gateway origin
+        shell: bash
+        env:
+          NEXT_PUBLIC_API_GATEWAY_URL: ${{ vars.NEXT_PUBLIC_API_GATEWAY_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$NEXT_PUBLIC_API_GATEWAY_URL" ]]; then
+            echo "::error::NEXT_PUBLIC_API_GATEWAY_URL repository variable is required"
+            exit 1
+          fi
+          if [[ "$NEXT_PUBLIC_API_GATEWAY_URL" != https://* ]]; then
+            echo "::error::NEXT_PUBLIC_API_GATEWAY_URL must use HTTPS for production"
+            exit 1
+          fi
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
+          build-args: |
+            NEXT_PUBLIC_API_GATEWAY_URL=${{ vars.NEXT_PUBLIC_API_GATEWAY_URL }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 

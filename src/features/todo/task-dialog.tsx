@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { cn } from "../../lib/cn";
 import { Modal } from "../../components/modal";
@@ -28,7 +28,7 @@ type ItemDialogProps = {
   googleCalendarConnected?: boolean;
   googleCalendars?: GoogleCalendarListItem[];
   onClose: () => void;
-  onSubmit: (draft: ItemDialogDraft) => void | Promise<void>;
+  onSubmit: (draft: ItemDialogDraft) => Promise<boolean>;
 };
 
 const EMPTY: ItemDialogDraft = {
@@ -48,6 +48,15 @@ const EMPTY: ItemDialogDraft = {
 };
 
 export function TaskDialog({
+	...props
+}: ItemDialogProps) {
+	const instanceKey = props.open
+		? `open:${props.task?.id ?? "new"}:${props.defaultType ?? "task"}`
+		: "closed";
+	return <TaskDialogForm key={instanceKey} {...props} />;
+}
+
+function TaskDialogForm({
   open,
   task,
   defaultType = "task",
@@ -56,22 +65,17 @@ export function TaskDialog({
   onClose,
   onSubmit,
 }: ItemDialogProps) {
-  const [draft, setDraft] = useState<ItemDialogDraft>(EMPTY);
   const locale = useLocale();
   const t = messages[locale].features.todo;
   const enabledGoogleCalendars = useMemo(
     () => (googleCalendarConnected ? googleCalendars.filter((calendar) => calendar.selected) : []),
     [googleCalendarConnected, googleCalendars],
   );
-
-  useEffect(() => {
-    if (!open) return;
+  const [draft, setDraft] = useState<ItemDialogDraft>(() => {
     const firstCalendar = enabledGoogleCalendars[0];
     const now = new Date();
     const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-    
-    setDraft(
-      task && task.id
+    return task && task.id
         ? {
             type: defaultType,
             title: task.title,
@@ -97,29 +101,38 @@ export function TaskDialog({
             endAt: oneHourLater.toISOString(),
             dueDate: task?.dueDate || format(now, "yyyy-MM-dd"),
             status: task?.status || "todo",
-          },
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, task?.id, defaultType]);
+          };
+  });
+  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function submit() {
-    if (!draft.title.trim()) return;
+  async function submit() {
+    if (saving || !draft.title.trim()) return;
     if (draft.type === "event" && (!draft.googleCalendarConnectionId || !draft.googleCalendarId)) return;
     if (draft.type === "event" && (!draft.startAt || !draft.endAt)) {
-      alert("Start and End times are required for events.");
+      alert(t.dialog.eventTimesRequired);
       return;
     }
     const selectedCalendar = enabledGoogleCalendars.find(
       (calendar) => calendar.connectionId === draft.googleCalendarConnectionId && calendar.id === draft.googleCalendarId,
     );
-    void onSubmit({
-      ...draft,
-      title: draft.title.trim(),
-      googleCalendarConnectionId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarConnectionId : undefined,
-      googleCalendarAccountId: (draft.startAt || draft.dueDate || draft.type === "event") ? selectedCalendar?.googleAccountId ?? draft.googleCalendarAccountId : undefined,
-      googleCalendarId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarId : undefined,
-    });
-    onClose();
+    setSaving(true);
+    setSubmitError(null);
+    try {
+      const saved = await onSubmit({
+        ...draft,
+        title: draft.title.trim(),
+        googleCalendarConnectionId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarConnectionId : undefined,
+        googleCalendarAccountId: (draft.startAt || draft.dueDate || draft.type === "event") ? selectedCalendar?.googleAccountId ?? draft.googleCalendarAccountId : undefined,
+        googleCalendarId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarId : undefined,
+      });
+      if (saved) onClose();
+      else setSubmitError(t.dialog.saveError);
+    } catch {
+      setSubmitError(t.dialog.saveError);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const isEvent = draft.type === "event";
@@ -134,7 +147,7 @@ export function TaskDialog({
           !isEvent ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
         )}
       >
-        Task
+        {t.dialog.taskType}
       </button>
       {googleCalendarConnected && (
         <button
@@ -151,7 +164,7 @@ export function TaskDialog({
             isEvent ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
           )}
         >
-          Event
+          {t.dialog.eventType}
         </button>
       )}
     </div>
@@ -179,7 +192,7 @@ export function TaskDialog({
                 active ? "bg-white/80" : STATUS_META[s].dot,
               )}
             />
-            {STATUS_META[s].label}
+            {t.columns[s]}
           </button>
         );
       })}
@@ -201,7 +214,7 @@ export function TaskDialog({
             value={draft.title}
             onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
             onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
+              if (e.key === "Enter") void submit();
             }}
             placeholder={t.dialog.titlePlaceholder}
             className="w-full rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
@@ -362,13 +375,15 @@ export function TaskDialog({
           </div>
         )}
 
+        {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
+
         <button
           type="button"
-          onClick={submit}
-          disabled={isEvent && (!draft.googleCalendarConnectionId || !draft.googleCalendarId)}
+          onClick={() => void submit()}
+          disabled={saving || (isEvent && (!draft.googleCalendarConnectionId || !draft.googleCalendarId))}
           className="w-full rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90 disabled:opacity-50"
         >
-          {t.dialog.submit}
+          {saving ? t.dialog.saving : t.dialog.submit}
         </button>
       </div>
     </Modal>

@@ -20,12 +20,24 @@ export function HabitCard({
 }) {
   const { habits, addHabit, removeHabit, toggleToday } = useHabits();
   const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const locale = useLocale();
   const t = messages[locale].features.habits;
 
-  function submit() {
-    addHabit(draft);
-    setDraft("");
+  async function submit() {
+    if (saving || !draft.trim()) return;
+    setSaving(true);
+    setSaveError(false);
+    try {
+      const saved = await addHabit(draft);
+      if (saved) setDraft("");
+      else setSaveError(true);
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -58,7 +70,7 @@ export function HabitCard({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            void submit();
           }}
           className="mt-3 flex shrink-0 items-center gap-2"
         >
@@ -71,6 +83,7 @@ export function HabitCard({
           <Tooltip label={t.addTooltip}>
             <button
               type="submit"
+              disabled={saving}
               aria-label={t.addTooltip}
               className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full bg-btn text-btn-ink transition-colors hover:opacity-90"
             >
@@ -78,6 +91,7 @@ export function HabitCard({
             </button>
           </Tooltip>
         </form>
+        {saveError ? <p className="mt-2 text-xs text-red-600">{t.saveError}</p> : null}
       </div>
     </BentoCard>
   );

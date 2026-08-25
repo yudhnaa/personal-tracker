@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FieldLabel, TextField } from "../../components/form-controls";
 import { Modal } from "../../components/modal";
 import {
@@ -28,25 +28,27 @@ const EMPTY: SubscriptionDraft = {
 };
 
 export function SubscriptionDialog({
+	...props
+}: SubscriptionDialogProps) {
+	return <SubscriptionDialogForm key={props.open ? "open" : "closed"} {...props} />;
+}
+
+function SubscriptionDialogForm({
   open,
   onClose,
   onSubmit,
 }: SubscriptionDialogProps) {
-  const [draft, setDraft] = useState<SubscriptionDraft>(EMPTY);
+  const [draft, setDraft] = useState<SubscriptionDraft>(() => ({
+    ...EMPTY,
+    nextRenewalDate: todayIso(),
+  }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const locale = useLocale();
   const t = messages[locale].features.subscriptions.dialog;
 
-  useEffect(() => {
-    if (!open) return;
-    setDraft({ ...EMPTY, nextRenewalDate: todayIso() });
-    setError(null);
-    setSaving(false);
-  }, [open]);
-
   async function submit() {
-    if (!draft.name.trim() || !draft.nextRenewalDate || draft.amount < 0) return;
+    if (saving || !draft.name.trim() || !draft.nextRenewalDate || draft.amount < 0) return;
     setSaving(true);
     setError(null);
     try {
@@ -58,6 +60,7 @@ export function SubscriptionDialog({
       onClose();
     } catch {
       setError(t.saveError);
+    } finally {
       setSaving(false);
     }
   }
@@ -72,7 +75,7 @@ export function SubscriptionDialog({
             placeholder={t.namePlaceholder}
             value={draft.name}
             onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
         </div>
 

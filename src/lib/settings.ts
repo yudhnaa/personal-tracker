@@ -1,3 +1,5 @@
+import type { ResponsiveLayouts } from "react-grid-layout";
+
 /** Per-browser personalization for the dashboard (board title, theme, etc). */
 
 export type ThemeMode = "light" | "dark";
@@ -11,7 +13,7 @@ export type Settings = {
   background: string;
   /** Hide done tasks completed more than N days ago; 0 = never hide. */
   archiveDays: number;
-  layout: Record<string, any> | null;
+  layout: ResponsiveLayouts | null;
   hiddenCards: string[];
 };
 

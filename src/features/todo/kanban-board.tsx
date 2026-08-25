@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -71,10 +71,7 @@ export function KanbanBoard({
     return m;
   }, [byStatus]);
 
-  // Re-sync from props when not mid-drag (e.g. add/edit/delete elsewhere).
-  useEffect(() => {
-    if (!activeId) setColumns(columnsFromStatus(byStatus));
-  }, [byStatus, activeId]);
+  const visibleColumns = activeId ? columns : columnsFromStatus(byStatus);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -107,6 +104,7 @@ export function KanbanBoard({
   }
 
   function handleDragStart(e: DragStartEvent) {
+    setColumns(columnsFromStatus(byStatus));
     setActiveId(e.active.id as string);
   }
 
@@ -171,7 +169,7 @@ export function KanbanBoard({
           <Column
             key={status}
             status={status}
-            ids={columns[status]}
+            ids={visibleColumns[status]}
             taskMap={taskMap}
             onOpen={onOpen}
             onAddTask={onAddTask}

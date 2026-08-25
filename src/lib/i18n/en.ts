@@ -5,8 +5,24 @@ export const en = {
 		register: "Create account",
 		account: "Account",
 	},
-	dashboard: { settings: "Settings" },
+	dashboard: {
+		settings: "Settings",
+		editLayout: "Edit layout",
+		cancelLayout: "Cancel",
+		saveLayout: "Save layout",
+		hiddenCards: (count: number) => `Hidden cards (${count})`,
+		restoreCards: "Restore cards",
+		cardNames: {
+			todo: "Todo",
+			pomodoro: "Pomodoro",
+			notes: "Notes",
+			bookmarks: "Bookmarks",
+			habits: "Habits",
+			subscriptions: "Subscriptions",
+		},
+	},
 	components: {
+		bentoCard: { hideCard: "Hide card" },
 		modal: { fallbackTitle: "Dialog", close: "Close" },
 		confirm: { cancel: "Cancel", confirm: "Confirm" },
 		languageSwitcher: { en: "English", vi: "Vietnamese" },
@@ -18,12 +34,7 @@ export const en = {
 		welcome: {
 			title: "Welcome to your board!",
 			intro:
-				"This is your personal space - everything stays in this browser, nothing is sent anywhere, and no login is needed.",
-			sampleData: "The board currently includes sample data.",
-			sampleAction:
-				"Open Settings and choose Delete data to start from an empty board.",
-			settingsLabel: "Settings",
-			deleteDataLabel: "Delete data",
+				"This is your private workspace. Tasks, notes, bookmarks, habits, and settings are saved to your account.",
 			start: "Start exploring",
 		},
 		settings: {
@@ -39,8 +50,6 @@ export const en = {
 			autoArchive: "Auto-hide completed tasks older than",
 			purgeOlder: "Delete completed tasks older than",
 			purgeButton: "Delete",
-			deleteAll: "Delete all data",
-			sampleData: "Create sample data",
 			noTasksTitle: "No tasks to clean",
 			noTasksMessage: (days: number) =>
 				`There are no completed tasks older than ${days} days.`,
@@ -48,12 +57,6 @@ export const en = {
 				`Delete ${count} completed task${count === 1 ? "" : "s"}?`,
 			purgeMessage: (days: number) =>
 				`Completed tasks older than ${days} days will be deleted permanently. Incomplete tasks are not affected.`,
-			deleteAllTitle: "Delete all data?",
-			deleteAllMessage:
-				"All tasks, notes, and bookmarks will be deleted. Visual settings will be kept.",
-			sampleTitle: "Create sample data?",
-			sampleMessage:
-				"This will overwrite all existing tasks, notes, and bookmarks with sample data.",
 			archiveDays: ["30 days", "90 days", "180 days", "1 year", "Never hide"],
 			purgeDays: ["30 days", "90 days", "180 days", "1 year"],
 			primaryColors: ["Emerald", "Blue", "Violet", "Rose", "Amber", "Slate"],
@@ -115,14 +118,13 @@ export const en = {
 		resetTitle: "Reset password",
 		requestReset: "Send reset link",
 		resetEmailSent:
-			"Reset link sent. Check your inbox or the development links below.",
+			"If an active account exists for that email, a reset link has been sent.",
 		newPassword: "New password",
 		changePassword: "Change password",
 		passwordChanged: "Password updated successfully.",
 		currentPassword: "Current password",
 		profile: "Profile",
 		logout: "Log out",
-		devResetLinks: "Development reset links",
 		resetPasswordSuccess: "Password has been reset successfully.",
 	},
 	features: {
@@ -131,6 +133,7 @@ export const en = {
 			empty: "No habits yet.\nAdd one below to start.",
 			placeholder: "Add a new habit...",
 			addTooltip: "Add habit",
+			saveError: "Habit could not be saved. Please try again.",
 			unmarkTooltip: "Unmark today",
 			markTooltip: "Mark today",
 			deleteTooltip: "Delete habit",
@@ -215,6 +218,8 @@ export const en = {
 				titlePlaceholder: "Display title",
 				group: "Group",
 				save: "Save",
+				saving: "Saving...",
+				saveError: "Bookmark could not be saved. Please try again.",
 			},
 			manager: {
 				title: "Manage groups",
@@ -310,6 +315,9 @@ export const en = {
 				add: "Add item",
 			},
 			dialog: {
+				taskType: "Task",
+				eventType: "Event",
+				eventTimesRequired: "Start and end times are required for events.",
 				titleLabel: "Title",
 				titlePlaceholder: "Task name...",
 				dueDateLabel: "Due date",
@@ -330,8 +338,11 @@ export const en = {
 				openGoogleCalendar: "Open in Google Calendar \u2192",
 				syncToAccessAdvanced: "Sync task to Google Calendar first to access advanced fields.",
 				submit: "Add task",
+				saving: "Saving...",
+				saveError: "Task could not be saved. Please try again.",
 			},
 			detail: {
+				googleEvent: "Google event",
 				title: "Task details",
 				deleteTitle: "Delete task?",
 				deleteMessage: (title: string) => `"${title}" will be permanently deleted and cannot be recovered.`,

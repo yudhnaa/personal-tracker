@@ -1,9 +1,9 @@
 "use client";
 
-import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { type Layout } from "react-grid-layout";
+import { type Layout, type ResponsiveLayouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -12,7 +12,7 @@ import { DashboardGrid } from "./components/dashboard-grid";
 import { SettingsModal } from "./components/settings-modal";
 import { StorageAlert } from "./components/storage-alert";
 import { WelcomeModal } from "./components/welcome-modal";
-import { apiJson } from "./lib/api-client";
+import { apiJson, ClientSessionChangedError } from "./lib/api-client";
 import { useApiState } from "./lib/use-api-state";
 import { useSettings } from "./lib/use-settings";
 import { BookmarkCard } from "./features/bookmarks/bookmark-card";
@@ -27,48 +27,47 @@ import { useGoogleCalendar } from "./features/google-calendar/use-google-calenda
 import { useMediaQuery } from "./lib/use-media-query";
 import { DEFAULT_SETTINGS } from "./lib/settings";
 
-const WELCOMED_KEY = "pt_welcomed";
-
 export function App({
+	accountId,
 	userEmail,
 	initialLocale,
-	initialLayout,
 }: {
+	accountId: string;
 	userEmail: string;
 	initialLocale: Locale;
-	initialLayout?: Record<string, Layout>;
 }) {
-	const { settings, update } = useSettings();
+	const { settings, update, saveError: settingsSaveError } = useSettings(accountId);
 	const googleCalendar = useGoogleCalendar();
-	const { notes, addNote, patchNote: patchStoredNote, removeNote: removeStoredNote } = useNotes();
+	const { notes, addNote, patchNote: patchStoredNote, removeNote: removeStoredNote } = useNotes(accountId);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [locale, setLocale] = useState<Locale>(initialLocale);
-	const { data: welcomed, setData: setWelcomed } = useApiState<boolean>(
-		"/api/welcome",
+	const {
+		data: welcomed,
+		setData: setWelcomed,
+		loading: welcomeLoading,
+		error: welcomeError,
+	} = useApiState<boolean>(
+		"/api/v1/welcome",
 		false,
 	);
 	
 	const [editMode, setEditMode] = useState(false);
-	const [localLayout, setLocalLayout] = useState<Record<string, Layout> | null>(null);
+	const [localLayout, setLocalLayout] = useState<ResponsiveLayouts | null>(null);
 	const [localHiddenCards, setLocalHiddenCards] = useState<string[]>([]);
 	const isDesktop = useMediaQuery("(min-width: 1024px)");
+	const reduceMotion = useReducedMotion();
 	
-	// Read localStorage on mount to prevent flash; sync back when welcomed changes
-	useEffect(() => {
-		if (welcomed) {
-			localStorage.setItem(WELCOMED_KEY, "true");
-		} else if (localStorage.getItem(WELCOMED_KEY) === "true") {
-			setWelcomed(true);
-		}
-	}, [welcomed, setWelcomed]);
-
-	function closeWelcome() {
+	async function closeWelcome() {
 		setWelcomed(true);
-		localStorage.setItem(WELCOMED_KEY, "true");
-		void apiJson<boolean>("/api/welcome", {
-			method: "PATCH",
-			body: JSON.stringify({ welcomed: true }),
-		});
+		try {
+			await apiJson<boolean>("/api/v1/welcome", {
+				method: "PATCH",
+				body: JSON.stringify({ welcomed: true }),
+			});
+		} catch (error) {
+			if (error instanceof ClientSessionChangedError) return;
+			setWelcomed(false);
+		}
 	}
 
 	const noteIds = useMemo(() => notes.map((note) => note.id), [notes]);
@@ -100,7 +99,7 @@ export function App({
 		setLocalHiddenCards([]);
 	};
 
-	const handleLayoutChange = (currentLayout: any, allLayouts: any) => {
+	const handleLayoutChange = (allLayouts: ResponsiveLayouts) => {
 		if (editMode && isDesktop) {
 			setLocalLayout(allLayouts);
 		}
@@ -129,7 +128,11 @@ export function App({
 	};
 
 	const handleAddNote = async () => {
-		await addNote();
+		try {
+			await addNote();
+		} catch {
+			// The hook restores the server state; keep the dashboard usable.
+		}
 	};
 
 	const patchNote = useCallback((id: string, patch: { title?: string; text?: string }) => {
@@ -201,7 +204,7 @@ export function App({
 					userEmail={userEmail}
 					locale={locale}
 					onOpenSettings={() => setSettingsOpen(true)}
-					editMode={editMode}
+					editMode={editMode && isDesktop}
 					onStartEdit={handleStartEdit}
 					onSaveEdit={handleSaveEdit}
 					onCancelEdit={handleCancelEdit}
@@ -212,9 +215,9 @@ export function App({
 				/>
 				{isDesktop ? (
 					<motion.div
-						initial={{ opacity: 0, y: 14 }}
+						initial={reduceMotion ? false : { opacity: 0, y: 14 }}
 						animate={{ opacity: 1, y: 0 }}
-						transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+						transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
 						className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
 					>
 						<DashboardGrid
@@ -234,23 +237,32 @@ export function App({
 					</motion.div>
 				) : (
 					<motion.div
-						initial={{ opacity: 0, y: 14 }}
+						initial={reduceMotion ? false : { opacity: 0, y: 14 }}
 						animate={{ opacity: 1, y: 0 }}
-						transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+						transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
 						className="flex min-h-0 flex-1 flex-col gap-2"
 					>
-						<div className="min-h-[460px]">{cards.todo}</div>
-						<div className="flex flex-col gap-2">
-							<div className="min-h-[320px] shrink-0">{cards.pomodoro}</div>
-							{notes.map((note) => (
-								<div key={note.id} className="min-h-[320px] flex-1">
-									{cards[noteCardId(note.id)]}
-								</div>
-							))}
-						</div>
-						<div className="min-h-[320px]">{cards.bookmarks}</div>
-						<div className="min-h-[320px]">{cards.habits}</div>
-						<div className="min-h-[360px]">{cards.subscriptions}</div>
+						{!hiddenCardsSet.has("todo") ? <div className="min-h-[460px]">{cards.todo}</div> : null}
+						{!hiddenCardsSet.has("pomodoro") || notes.some((note, index) => (
+							!hiddenCardsSet.has(noteCardId(note.id))
+							&& !(index === 0 && hiddenCardsSet.has("notes"))
+						)) ? (
+							<div className="flex flex-col gap-2">
+								{!hiddenCardsSet.has("pomodoro") ? <div className="min-h-[320px] shrink-0">{cards.pomodoro}</div> : null}
+								{notes.map((note, index) => {
+									const id = noteCardId(note.id);
+									if (hiddenCardsSet.has(id) || (index === 0 && hiddenCardsSet.has("notes"))) return null;
+									return (
+										<div key={note.id} className="min-h-[320px] flex-1">
+											{cards[id]}
+										</div>
+									);
+								})}
+							</div>
+						) : null}
+						{!hiddenCardsSet.has("bookmarks") ? <div className="min-h-[320px]">{cards.bookmarks}</div> : null}
+						{!hiddenCardsSet.has("habits") ? <div className="min-h-[320px]">{cards.habits}</div> : null}
+						{!hiddenCardsSet.has("subscriptions") ? <div className="min-h-[360px]">{cards.subscriptions}</div> : null}
 					</motion.div>
 				)}
 			</div>
@@ -261,12 +273,13 @@ export function App({
 				locale={locale}
 				onLocaleChange={setLocale}
 				googleCalendar={googleCalendar}
+				saveError={settingsSaveError}
 				onClose={() => setSettingsOpen(false)}
 				onUpdate={update}
 			/>
 
 			<WelcomeModal
-				open={!welcomed}
+				open={!welcomeLoading && !welcomeError && welcomed === false}
 				locale={locale}
 				onClose={closeWelcome}
 			/>
@@ -280,12 +293,12 @@ function noteCardId(noteId: string) {
 	return `note:${noteId}`;
 }
 
-function normalizeLayoutForNotes(layout: Record<string, any> | null, noteIds: string[]) {
+function normalizeLayoutForNotes(layout: ResponsiveLayouts | null, noteIds: string[]): ResponsiveLayouts {
 	const source = layout && Object.keys(layout).length > 0 ? layout : DEFAULT_SETTINGS.layout;
 	const lg = Array.isArray(source?.lg) ? [...source.lg] : [...(DEFAULT_SETTINGS.layout?.lg ?? [])];
 	const firstNoteId = noteIds[0] ? noteCardId(noteIds[0]) : null;
 	const noteIdSet = new Set(noteIds.map(noteCardId));
-	const normalized: any[] = [];
+	const normalized: Layout[number][] = [];
 	let migratedFirstNote = false;
 
 	for (const item of lg) {

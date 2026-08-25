@@ -2,6 +2,8 @@ import { EyeOff, GripVertical, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
 import { IconButton } from "./icon-button";
+import { messages } from "../lib/i18n";
+import { useLocale } from "./locale-provider";
 
 type BentoCardProps = {
   icon: LucideIcon;
@@ -32,6 +34,8 @@ export function BentoCard({
   onHide,
   children,
 }: BentoCardProps) {
+  const locale = useLocale();
+  const hideCardLabel = messages[locale].components.bentoCard.hideCard;
   return (
     <section
       className={cn(
@@ -56,7 +60,7 @@ export function BentoCard({
         <div className="flex items-center gap-2">
           {!editMode && action}
           {editMode && onHide && (
-            <IconButton aria-label="Hide card" onClick={onHide}>
+            <IconButton aria-label={hideCardLabel} title={hideCardLabel} onClick={onHide}>
               <EyeOff size={18} />
             </IconButton>
           )}

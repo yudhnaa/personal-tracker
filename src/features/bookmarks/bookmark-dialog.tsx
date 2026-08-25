@@ -13,12 +13,18 @@ type BookmarkDialogProps = {
   open: boolean;
   groups: string[];
   onClose: () => void;
-  onSubmit: (draft: BookmarkDraft) => void;
+  onSubmit: (draft: BookmarkDraft) => Promise<boolean>;
 };
 
 const EMPTY: BookmarkDraft = { url: "", title: "", group: "" };
 
 export function BookmarkDialog({
+	...props
+}: BookmarkDialogProps) {
+	return <BookmarkDialogForm key={props.open ? "open" : "closed"} {...props} />;
+}
+
+function BookmarkDialogForm({
   open,
   groups,
   onClose,
@@ -26,21 +32,17 @@ export function BookmarkDialog({
 }: BookmarkDialogProps) {
   const [draft, setDraft] = useState<BookmarkDraft>(EMPTY);
   const [loadingTitle, setLoadingTitle] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   // Stop auto-fill once the user types their own title.
   const titleEdited = useRef(false);
+  const titleRequestId = useRef(0);
   const locale = useLocale();
   const t = messages[locale].features.bookmarks.dialog;
 
-  useEffect(() => {
-    if (open) {
-      setDraft(EMPTY);
-      titleEdited.current = false;
-      setLoadingTitle(false);
-    }
-  }, [open]);
-
   // Debounced auto-fetch of the page title whenever the URL settles.
   useEffect(() => {
+    const requestId = ++titleRequestId.current;
     const url = normalizeUrl(draft.url);
     if (!open || !url || titleEdited.current || !/\.\w{2,}/.test(draft.url)) {
       return;
@@ -49,21 +51,32 @@ export function BookmarkDialog({
     const timer = window.setTimeout(async () => {
       setLoadingTitle(true);
       const title = await fetchPageTitle(url, ctrl.signal);
+      if (ctrl.signal.aborted || titleRequestId.current !== requestId) return;
       setLoadingTitle(false);
       if (title && !titleEdited.current) {
         setDraft((d) => ({ ...d, title: tidyTitle(title) }));
       }
     }, 700);
     return () => {
+      if (titleRequestId.current === requestId) titleRequestId.current += 1;
       ctrl.abort();
       window.clearTimeout(timer);
     };
   }, [draft.url, open]);
 
-  function submit() {
-    if (!draft.url.trim()) return;
-    onSubmit(draft);
-    onClose();
+  async function submit() {
+    if (saving || !draft.url.trim()) return;
+    setSaving(true);
+    setSubmitError(null);
+    try {
+      const saved = await onSubmit(draft);
+      if (saved) onClose();
+      else setSubmitError(t.saveError);
+    } catch {
+      setSubmitError(t.saveError);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -75,8 +88,12 @@ export function BookmarkDialog({
             autoFocus
             placeholder={t.urlPlaceholder}
             value={draft.url}
-            onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onChange={(e) => {
+              titleRequestId.current += 1;
+              setLoadingTitle(false);
+              setDraft((d) => ({ ...d, url: e.target.value }));
+            }}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
         </div>
         <div>
@@ -106,12 +123,15 @@ export function BookmarkDialog({
             onChange={(group) => setDraft((d) => ({ ...d, group }))}
           />
         </div>
+        {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
+
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
+          disabled={saving}
           className="w-full rounded-full bg-btn py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
         >
-          {t.save}
+          {saving ? t.saving : t.save}
         </button>
       </div>
     </Modal>

@@ -5,7 +5,7 @@ import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 import { IconButton } from "@/components/icon-button";
 import { useConfirm } from "@/components/confirm-dialog";
-import type { Note } from "@/lib/dashboard-data";
+import type { Note } from "./types";
 
 /** A free-form scratch note card. */
 export function NotesCard({
@@ -24,7 +24,6 @@ export function NotesCard({
   onDelete: () => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [titleDraft, setTitleDraft] = useState(note.title);
   const onPatchRef = useRef(onPatch);
 
   const text = draft !== null ? draft : note.text;
@@ -38,13 +37,9 @@ export function NotesCard({
   }, [onPatch]);
 
   useEffect(() => {
-    setTitleDraft(note.title);
-  }, [note.id, note.title]);
-
-  useEffect(() => {
-    if (draft !== null && draft === note.text) {
-      setDraft(null);
-    }
+    if (draft === null || draft !== note.text) return;
+    const timeout = window.setTimeout(() => setDraft(null), 0);
+    return () => window.clearTimeout(timeout);
   }, [draft, note.text]);
 
   useEffect(() => {
@@ -55,9 +50,9 @@ export function NotesCard({
     return () => window.clearTimeout(timeout);
   }, [draft, note.text]);
 
-  function commitTitle() {
-    const clean = titleDraft.trim() || "Note";
-    setTitleDraft(clean);
+  function commitTitle(input: HTMLInputElement) {
+    const clean = input.value.trim() || "Note";
+    input.value = clean;
     if (clean !== note.title) onPatch({ title: clean });
   }
 
@@ -97,13 +92,14 @@ export function NotesCard({
     >
       <div className="flex h-full min-h-0 flex-col gap-2">
         <input
-          value={titleDraft}
-          onChange={(e) => setTitleDraft(e.target.value)}
-          onBlur={commitTitle}
+          key={note.title}
+          maxLength={120}
+          defaultValue={note.title}
+          onBlur={(e) => commitTitle(e.currentTarget)}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();
             if (e.key === "Escape") {
-              setTitleDraft(note.title);
+              e.currentTarget.value = note.title;
               e.currentTarget.blur();
             }
           }}
@@ -111,6 +107,7 @@ export function NotesCard({
           className="h-9 shrink-0 rounded-[var(--radius-inner)] bg-surface-sunken px-3 text-sm font-semibold text-ink outline-none transition-colors placeholder:text-ink-faint focus:ring-2 focus:ring-accent/30"
         />
         <textarea
+          maxLength={50_000}
           id={`notes-content-${note.id}`}
           name={`notes-content-${note.id}`}
           value={text}

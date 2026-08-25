@@ -1,11 +1,11 @@
 import React from "react";
-import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
+import { GridLayout, useContainerWidth, type Layout, type ResponsiveLayouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
 interface DashboardGridProps {
-	activeLayout: any;
-	handleLayoutChange: (currentLayout: any, allLayouts: any) => void;
+	activeLayout: ResponsiveLayouts;
+	handleLayoutChange: (allLayouts: ResponsiveLayouts) => void;
 	editMode: boolean;
 	children: React.ReactNode;
 }
@@ -37,7 +37,7 @@ export function DashboardGrid({
 			? activeLayout
 			: [];
 
-	const safeLayout = layoutItems.map((item: any) => ({
+	const safeLayout: Layout = layoutItems.map((item) => ({
 		...item,
 		...minSizeFor(item.i),
 	}));
@@ -57,9 +57,7 @@ export function DashboardGrid({
 						rowHeight: 20,
 						margin: [8, 8] as [number, number],
 					}}
-					onLayoutChange={(newLayout: Layout) =>
-						handleLayoutChange(null, { lg: newLayout })
-					}
+					onLayoutChange={(newLayout: Layout) => handleLayoutChange({ lg: newLayout })}
 					dragConfig={{ enabled: editMode, handle: ".drag-handle" }}
 					resizeConfig={{ enabled: editMode }}
 				>

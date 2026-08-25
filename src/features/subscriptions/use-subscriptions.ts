@@ -1,4 +1,4 @@
-import { apiJson } from "../../lib/api-client";
+import { apiJson, ClientSessionChangedError } from "../../lib/api-client";
 import {
   sortSubscriptions,
   type BillingCycle,
@@ -19,12 +19,12 @@ export type SubscriptionDraft = {
 
 export function useSubscriptions() {
   const { data: subscriptions, setData, reload } = useApiState<Subscription[]>(
-    "/api/subscriptions",
+    "/api/v1/subscriptions",
     [],
   );
 
   async function addSubscription(draft: SubscriptionDraft) {
-    const next = await apiJson<Subscription[]>("/api/subscriptions", {
+    const next = await apiJson<Subscription[]>("/api/v1/subscriptions", {
       method: "POST",
       body: JSON.stringify(draft),
     });
@@ -34,11 +34,12 @@ export function useSubscriptions() {
   async function removeSubscription(id: string) {
     setData((prev) => prev.filter((item) => item.id !== id));
     try {
-      const next = await apiJson<Subscription[]>(`/api/subscriptions/${id}`, {
+      const next = await apiJson<Subscription[]>(`/api/v1/subscriptions/${id}`, {
         method: "DELETE",
       });
       setData(sortSubscriptions(next));
     } catch (error) {
+      if (error instanceof ClientSessionChangedError) throw error;
       await reload();
       throw error;
     }
@@ -46,7 +47,7 @@ export function useSubscriptions() {
 
   async function confirmPayment(id: string) {
     const updated = await apiJson<Subscription>(
-      `/api/subscriptions/${id}/confirm`,
+      `/api/v1/subscriptions/${id}/confirm`,
       {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },

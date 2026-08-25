@@ -5,14 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "npm run typecheck && next build",
+    "build": "npm run typecheck && next build --webpack",
+    "lint": "eslint .",
     "preview": "next start",
+    "test:api-client": "node --test scripts/test-api-client.mjs",
     "test:subscriptions": "node --test scripts/test-subscriptions.mjs",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:migrate:prod": "node scripts/migrate.js",
-    "db:studio": "drizzle-kit studio"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -22,19 +20,12 @@
     "@radix-ui/react-select": "^2.3.0",
     "@radix-ui/react-tooltip": "^1.2.9",
     "@tailwindcss/typography": "^0.5.20",
-    "@tanstack/query-sync-storage-persister": "^5.101.0",
     "@tanstack/react-query": "^5.101.0",
-    "@tanstack/react-query-persist-client": "^5.101.0",
-    "better-auth": "^1.6.18",
-    "bullmq": "^5.78.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
-    "drizzle-orm": "^0.45.2",
-    "ioredis": "^5.11.1",
     "lucide-react": "^0.469.0",
     "motion": "^12.40.0",
     "next": "^16.2.9",
-    "pg": "^8.21.0",
     "react": "^19.0.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.0.0",
@@ -48,11 +39,11 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^24.10.1",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/react-resizable": "^3.0.8",
-    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2"
   }

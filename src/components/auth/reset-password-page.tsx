@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AuthShell } from "./auth-shell";
 import { messages, type Locale } from "@/lib/i18n";
+import { apiJson } from "@/lib/api-client";
 
 export function ResetPasswordPage({
 	initialLocale,
@@ -14,15 +15,24 @@ export function ResetPasswordPage({
 	const t = messages[initialLocale].auth;
 	const [password, setPassword] = useState("");
 	const [message, setMessage] = useState("");
+	const [submitting, setSubmitting] = useState(false);
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
-		const response = await fetch("/api/auth/reset-password", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ token, newPassword: password }),
-		});
-		setMessage(response.ok ? t.resetPasswordSuccess : await response.text());
+		if (submitting) return;
+		setSubmitting(true);
+		setMessage("");
+		try {
+			await apiJson<void>("/api/v1/auth/reset-password", {
+				method: "POST",
+				body: JSON.stringify({ token, newPassword: password }),
+			});
+			setMessage(t.resetPasswordSuccess);
+		} catch (error) {
+			setMessage(error instanceof Error ? error.message : String(error));
+		} finally {
+			setSubmitting(false);
+		}
 	}
 
 	return (
@@ -36,18 +46,20 @@ export function ResetPasswordPage({
 					{t.newPassword}
 					<input
 						className="mt-2 w-full rounded-[var(--radius-inner)] bg-surface px-3 py-2 outline-none ring-1 ring-line focus:ring-accent"
-						type="password"
+							type="password"
+							name="new-password"
+							autoComplete="new-password"
 						value={password}
 						onChange={(event) => setPassword(event.target.value)}
 						required
-						minLength={8}
+						minLength={12}
 					/>
 				</label>
-				<button className="mt-6 w-full rounded-full bg-btn px-4 py-3 text-sm font-semibold text-btn-ink">
+					<button type="submit" disabled={submitting} className="mt-6 w-full rounded-full bg-btn px-4 py-3 text-sm font-semibold text-btn-ink disabled:cursor-not-allowed disabled:opacity-60">
 					{t.changePassword}
 				</button>
 				{message ? (
-					<p className="mt-4 rounded-[var(--radius-inner)] bg-surface p-3 text-sm text-ink-soft">
+						<p aria-live="polite" className="mt-4 rounded-[var(--radius-inner)] bg-surface p-3 text-sm text-ink-soft">
 						{message}
 					</p>
 				) : null}

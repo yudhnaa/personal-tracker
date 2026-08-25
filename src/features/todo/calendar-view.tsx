@@ -63,7 +63,7 @@ export function CalendarView({
 
 		if (startD > endD) return [startIso];
 
-		let current = new Date(startD);
+		const current = new Date(startD);
 		while (current <= endD) {
 			dates.push(toIsoDate(current));
 			current.setDate(current.getDate() + 1);
@@ -160,12 +160,14 @@ export function CalendarView({
 
 	const today = todayIso();
 
-	const dayTasksInView = dayView ? (byDate.get(dayView) ?? []) : [];
-	const dayEventsInView = dayView ? (eventsByDate.get(dayView) ?? []) : [];
 	const dayItemsInView = useMemo(
-		() => buildDayItems(dayTasksInView, dayEventsInView),
-		[dayEventsInView, dayTasksInView],
+		() => buildDayItems(
+			dayView ? (byDate.get(dayView) ?? []) : [],
+			dayView ? (eventsByDate.get(dayView) ?? []) : [],
+		),
+		[byDate, dayView, eventsByDate],
 	);
+	const dayEventsInView = dayView ? (eventsByDate.get(dayView) ?? []) : [];
 
 	const googleConnected =
 		googleCalendar.connection.connected;
@@ -382,7 +384,7 @@ export function CalendarView({
 												STATUS_META[item.task.status].chip,
 											)}
 										>
-											{STATUS_META[item.task.status].label}
+											{t.columns[item.task.status]}
 										</span>
 									</button>
 								) : (
@@ -498,10 +500,6 @@ function buildDayItems(
 			sort: `z-${task.createdAt}`,
 		})),
 	].sort((a, b) => a.sort.localeCompare(b.sort));
-}
-
-function eventDate(event: GoogleCalendarEvent) {
-	return event.start.slice(0, 10);
 }
 
 function eventKey(googleAccountId: string, calendarId: string, eventId: string) {

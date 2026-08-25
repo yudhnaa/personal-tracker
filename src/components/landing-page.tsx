@@ -5,17 +5,18 @@ import { CheckCircle2, Clock3, FolderHeart, KanbanSquare } from "lucide-react";
 import { useState } from "react";
 import { LanguageSwitcher } from "./language-switcher";
 import { messages, type Locale } from "@/lib/i18n";
+import { useCurrentAccount } from "@/lib/use-required-account";
 
 const icons = [KanbanSquare, FolderHeart, CheckCircle2];
 
 export function LandingPage({
 	initialLocale,
-	isLoggedIn,
 }: {
 	initialLocale: Locale;
-	isLoggedIn?: boolean;
 }) {
 	const [locale, setLocale] = useState(initialLocale);
+	const account = useCurrentAccount();
+	const isLoggedIn = Boolean(account.data);
 	const t = messages[locale];
 
 	return (
