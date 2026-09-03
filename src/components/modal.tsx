@@ -1,6 +1,6 @@
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../lib/cn";
 import { IconButton } from "./icon-button";
@@ -21,6 +21,11 @@ type ModalProps = {
 
 const FOCUSABLE =
 	'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])';
+const subscribeToHydration = () => () => undefined;
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+let bodyScrollLockCount = 0;
+let bodyOverflowBeforeLock = "";
 
 /**
  * Centered dialog with animated enter/exit. Closes on Escape / backdrop, traps
@@ -36,18 +41,20 @@ export function Modal({
 	wide,
 }: ModalProps) {
 	const dialogRef = useRef<HTMLDivElement>(null);
-	const [mounted, setMounted] = useState(false);
+	const mounted = useSyncExternalStore(
+		subscribeToHydration,
+		getClientHydrationSnapshot,
+		getServerHydrationSnapshot,
+	);
 	const locale = useLocale();
 	const t = messages[locale].components.modal;
-
-	useEffect(() => {
-		setMounted(true);
-	}, []);
+	const reduceMotion = useReducedMotion();
 
 	// Escape closes; Tab cycles within the dialog (skips Radix portals).
 	useEffect(() => {
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
+			if (!isTopmostDialog(dialogRef.current)) return;
 			if (e.key === "Escape") {
 				// A Radix dropdown (select/date popover) is open — let it consume Esc
 				// first; one keypress shouldn't dismiss the whole dialog too.
@@ -68,8 +75,7 @@ export function Modal({
 		// that field as the trigger to restore to.
 		const focusedInside = !!dialogRef.current?.contains(active);
 		const trigger = focusedInside ? null : active;
-		const prevOverflow = document.body.style.overflow;
-		document.body.style.overflow = "hidden";
+		const releaseBodyScroll = lockBodyScroll();
 		const id = window.setTimeout(() => {
 			const dialog = dialogRef.current;
 			if (!dialog || dialog.contains(document.activeElement)) return;
@@ -77,7 +83,7 @@ export function Modal({
 		}, 0);
 		return () => {
 			window.clearTimeout(id);
-			document.body.style.overflow = prevOverflow;
+			releaseBodyScroll();
 			trigger?.focus?.();
 		};
 	}, [open]);
@@ -93,10 +99,10 @@ export function Modal({
 				<motion.div
 					className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
 					onMouseDown={onClose}
-					initial={{ opacity: 0 }}
+					initial={reduceMotion ? false : { opacity: 0 }}
 					animate={{ opacity: 1 }}
 					exit={{ opacity: 0 }}
-					transition={{ duration: 0.18 }}
+					transition={{ duration: reduceMotion ? 0 : 0.18 }}
 				>
 					<motion.div
 						ref={dialogRef}
@@ -109,10 +115,10 @@ export function Modal({
 							wide ? "max-w-3xl" : "max-w-xl",
 						)}
 						onMouseDown={(e) => e.stopPropagation()}
-						initial={{ opacity: 0, scale: 0.96, y: 10 }}
+						initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 10 }}
 						animate={{ opacity: 1, scale: 1, y: 0 }}
 						exit={{ opacity: 0, scale: 0.96, y: 10 }}
-						transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+						transition={reduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
 					>
 						<div className="mb-5 flex items-center justify-between gap-3">
 							{typeof title === "string" ? (
@@ -140,6 +146,29 @@ export function Modal({
 		</AnimatePresence>,
 		document.body,
 	);
+}
+
+function isTopmostDialog(dialog: HTMLElement | null): boolean {
+	if (!dialog) return false;
+	const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]');
+	return dialogs.length > 0 && dialogs[dialogs.length - 1] === dialog;
+}
+
+function lockBodyScroll(): () => void {
+	if (bodyScrollLockCount === 0) {
+		bodyOverflowBeforeLock = document.body.style.overflow;
+	}
+	bodyScrollLockCount += 1;
+	document.body.style.overflow = "hidden";
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
+		if (bodyScrollLockCount === 0) {
+			document.body.style.overflow = bodyOverflowBeforeLock;
+		}
+	};
 }
 
 /**

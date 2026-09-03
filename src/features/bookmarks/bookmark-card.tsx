@@ -1,4 +1,5 @@
 import { Bookmark as BookmarkIcon, Plus, Settings2, X } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 import { BentoCard } from "../../components/bento-card";
 import { useConfirm } from "../../components/confirm-dialog";
@@ -13,7 +14,15 @@ import { GroupManagerDialog } from "./group-manager-dialog";
 import { useBookmarks } from "./use-bookmarks";
 
 /** Bookmark tracker: favicon list with optional category filtering. */
-export function BookmarkCard({ className }: { className?: string }) {
+export function BookmarkCard({
+  className,
+  editMode,
+  onHide,
+}: {
+  className?: string;
+  editMode?: boolean;
+  onHide?: () => void;
+}) {
   const {
     bookmarks,
     groups,
@@ -52,6 +61,8 @@ export function BookmarkCard({ className }: { className?: string }) {
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
       action={
         <>
           <button
@@ -107,11 +118,13 @@ export function BookmarkCard({ className }: { className?: string }) {
                   rel="noreferrer"
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  <img
+                  <Image
                     src={faviconUrl(b.url)}
                     alt=""
                     width={20}
                     height={20}
+                    loader={({ src }) => src}
+                    unoptimized
                     className="h-5 w-5 shrink-0 rounded"
                     onError={(e) => {
                       e.currentTarget.style.visibility = "hidden";

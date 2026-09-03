@@ -1,81 +1,109 @@
 # Personal Tracker
 
-Personal Tracker is a private Bento-grid dashboard for everyday planning. It combines Todo, Pomodoro, Notes, Bookmarks, Habits, and personal settings in a Next.js App Router application with BetterAuth sessions and PostgreSQL persistence.
+Personal Tracker is a private planning workspace built on Next.js App Router. It uses the Java Gateway/Auth/Tracker backend for account sessions and per-user PostgreSQL data.
+
+## Current Product Surface
+
+- `/`: localized landing page with auth entry points and dashboard CTA.
+- `/login`, `/register`: email/password auth flows.
+- `/forgot-password`, `/reset-password`: Resend-backed password reset through the Java Auth service.
+- `/account`: signed-in account page for email display and password change.
+- `/dashboard`: authenticated dashboard with persisted layout, hidden cards, welcome state, and per-user data.
+
+Dashboard data is not imported from the legacy Vite/localStorage build. Browser storage is still used for a few non-sensitive UI hints, but the product source of truth is the authenticated backend.
+
+## Dashboard Features
+
+| Area | Current behavior |
+|------|------------------|
+| Todo | Kanban and calendar views, CRUD, due dates, checklist items, drag-sort persistence, and Google Calendar-linked tasks/events. |
+| Notes | Multiple independent note cards with title/text editing and API-backed persistence. |
+| Bookmarks | Grouped bookmarks with URL normalization, title fallback, group rename, and detach-on-delete behavior. |
+| Habits | Habit creation/removal plus per-day completion tracking and streak summaries. |
+| Pomodoro | Preset focus/break sessions with notifications and chime transitions. |
+| Subscriptions | Renewal tracking with monthly/yearly cycles, urgency sorting, and idempotent payment confirmation. |
+| Settings | Theme, accent, background, board title, archive threshold, card layout, hidden cards, and archived-task purge. |
+| Google Calendar | Multi-account connection management, calendar selection, event sync, and event-to-task conversion. |
 
 ## Stack
 
-- Next.js App Router
+- Next.js 16 App Router
 - React 19
 - TypeScript
 - Tailwind CSS v4
-- BetterAuth email/password auth
-- PostgreSQL and Drizzle ORM
-- lucide-react icons
-- motion animations
-- dnd-kit for Todo drag and drop
-- date-fns and react-day-picker for date UI
+- Java 21/Spring Boot Gateway, Auth, and Tracker services
+- PostgreSQL and RabbitMQ through the backend Compose stack
+- TanStack Query v5 for selected remote-cache workflows
+- lucide-react, Radix-based popover/select, motion, react-grid-layout, dnd-kit
+- date-fns, react-day-picker, react-markdown, remark-gfm
 
 ## Local Setup
 
+Start the backend first from `../personal-tracker-backend`, then run the frontend:
+
 ```bash
+cd ../personal-tracker-backend
+cp .env.example .env
+docker compose --file infra/compose.yaml up --build --detach --wait
+cd ../personal-tracker
 npm install
 cp .env.example .env.local
-docker compose up -d --wait postgres
-npm run db:migrate
 npm run dev
 ```
 
-The app runs at `http://localhost:3000`. Docker exposes PostgreSQL on `127.0.0.1:5433` to avoid clashing with a local Postgres install on port `5432`.
+The app runs at `http://localhost:3000` and calls Gateway at
+`http://localhost:8080`. PostgreSQL and RabbitMQ stay on the internal Compose
+network.
+
+Google Calendar, RabbitMQ workers, and Resend are configured in the backend
+`.env`. The canonical setup, integration, security, and manual-verification
+runbook is `@doc/operations/runbook` in Knowns.
 
 ## Commands
 
 ```bash
-npm run dev        # Next.js dev server
-npm run typecheck  # TypeScript check
-npm run build      # typecheck + production build
-npm run preview    # Next.js production server
-npm run db:generate
-npm run db:migrate
-npm run db:studio
+npm run dev
+npm run lint
+npm run typecheck
+npm run build
+npm run preview
+npm run test:api-client
+npm run test:subscriptions
 ```
 
-## Product Surface
+## Deployment configuration
 
-- `/`: responsive marketing landing page with English/Vietnamese locale support.
-- `/login`, `/register`: BetterAuth email/password auth flows.
-- `/forgot-password`, `/reset-password`: dev-only reset-link delivery and reset flow.
-- `/account`: profile email, logout, and change-password flow.
-- `/dashboard`: authenticated Bento dashboard.
-
-Dashboard data is private per user and stored in PostgreSQL. Existing browser `localStorage` data from the old Vite app is treated as legacy data and is not imported automatically.
-
-## Dashboard Features
-
-| Card | Behavior |
-|------|----------|
-| Todo | Kanban and calendar views with task CRUD, due dates, statuses, done timestamps, checklist items, and drag-sort persistence. |
-| Pomodoro | Focus/break presets, progress ring, browser notifications, and chime support. |
-| Notes | Freeform note text with API-backed persistence. |
-| Bookmarks | Bookmarks and first-class bookmark groups with rename/delete detach behavior. |
-| Habits | Habit creation/removal, today's completion toggle, streak, and recent-day tracking. |
-| Settings | Board title, theme, accent, background, archive threshold, sample data, purge, and data clearing. |
+`NEXT_PUBLIC_API_GATEWAY_URL` is browser-visible and is compiled into the
+frontend image. Set the GitHub Actions repository variable with that name to
+the public HTTPS Gateway origin before building a production image. The
+production Compose file starts only the frontend image; PostgreSQL, RabbitMQ,
+Auth, and Tracker are owned by the backend deployment.
 
 ## Repository Map
 
 ```text
-app/                         # Next.js routes and route handlers
-drizzle/                     # generated SQL migrations
+app/                              # App Router pages
 src/
-├── app.tsx                  # client dashboard shell
-├── components/              # shared UI, auth screens, landing page
-├── db/                      # Drizzle connection and schema
-├── features/                # dashboard feature cards and hooks
-└── lib/                     # auth, API helpers, i18n, settings, utilities
+├── app.tsx                       # client dashboard orchestration
+├── components/                   # shared shell, auth screens, landing page, modals
+├── features/
+│   ├── bookmarks/
+│   ├── google-calendar/
+│   ├── habits/
+│   ├── notes/
+│   ├── pomodoro/
+│   ├── subscriptions/
+│   └── todo/
+└── lib/                          # API helpers, i18n, settings, utilities
 ```
 
-## Development Notes
+## Documentation Notes
 
-- Dashboard REST handlers reject unauthenticated requests and scope reads/writes by BetterAuth user ID.
-- `localStorage` remains only for small non-sensitive UI preferences such as the Todo view toggle.
-- Dev password reset links are logged and exposed at `/api/dev/password-reset-links`; SMTP is intentionally out of scope for this phase.
-- See `DESIGN.md` for the current dashboard visual system.
+- This `README.md` is the repository onboarding and command reference.
+- Current architecture, API, design/conventions, and operations live in Knowns at
+  `@doc/architecture`, `@doc/api/http-api-surface`, `@doc/conventions`, and
+  `@doc/operations/runbook`.
+- `AGENTS.md` is an agent-control file required by the workspace, not product
+  documentation.
+- Do not create feature-local documentation. Merge durable guidance into this
+  README or the appropriate canonical Knowns document.

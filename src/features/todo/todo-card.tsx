@@ -1,8 +1,7 @@
 import { Calendar, KanbanSquare, ListChecks, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { BentoCard } from "../../components/bento-card";
 import { cn } from "../../lib/cn";
-import { toIsoDate } from "../../lib/date";
 import { useLocalStorage } from "../../lib/use-local-storage";
 import { CalendarView } from "./calendar-view";
 import { KanbanBoard } from "./kanban-board";
@@ -13,24 +12,28 @@ import { useTodos } from "./use-todos";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 import type { UseGoogleCalendarResult } from "../google-calendar/use-google-calendar";
-import type { GoogleCalendarEvent, GoogleCalendarEventDraft } from "../google-calendar/types";
+import type { GoogleCalendarEvent } from "../google-calendar/types";
 
 type View = "board" | "calendar";
+const subscribeToHydration = () => () => undefined;
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
 type TodoCardProps = {
   className?: string;
-  archiveDays: number;
   googleCalendar: UseGoogleCalendarResult;
+  editMode?: boolean;
+  onHide?: () => void;
 };
 
-export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardProps) {
+export function TodoCard({ className, googleCalendar, editMode, onHide }: TodoCardProps) {
   const { tasks, byStatus, addTask, patchTask, reorderTasks, removeTask } = useTodos();
   const [view, setView] = useLocalStorage<View>("pt.todo-view", "board");
-  const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
 
   // Creating uses the quick form
   const [createItem, setCreateItem] = useState<{ task: Task | null, type: ItemType } | null>(null);
@@ -57,46 +60,26 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
   }
 
   async function handleCreateSubmit(draft: ItemDialogDraft) {
-    if (draft.type === "task") {
-      await addTask(draft);
+    const { type, ...taskDraft } = draft;
+    if (type === "task") {
+      return Boolean(await addTask(taskDraft));
     } else {
-      await googleCalendar.createEvent({
+      const created = await googleCalendar.createEvent({
         title: draft.title,
         description: draft.description,
         location: draft.location,
         start: draft.startAt || draft.dueDate, // TaskDialog returns iso format
         end: draft.endAt || "",
         allDay: draft.allDay,
+        connectionId: draft.googleCalendarConnectionId!,
         calendarId: draft.googleCalendarId!,
       });
-    }
-  }
-
-  async function handlePatchEvent(patch: GoogleCalendarEventDraft) {
-    if (detailEvent) {
-      await googleCalendar.updateEvent(detailEvent, patch);
-      setDetailEvent(null); // Optimistically close or it might jump?
-      // Wait, we probably want to update the local state to reflect changes instantly,
-      // but `use-google-calendar.ts` handles optimistic updates! So the event reference changes.
-      // Better to close it for now, or just let it re-render. Let's just close it.
+      return Boolean(created);
     }
   }
 
   async function convertEventToTask(event: GoogleCalendarEvent) {
-    const created = await addTask({
-      title: event.title || "Untitled Event",
-      description: event.description || "",
-      dueDate: event.start.slice(0, 10),
-      startAt: event.start,
-      endAt: event.end,
-      allDay: event.allDay,
-      location: event.location,
-      status: "todo",
-      checklist: [],
-      googleCalendarId: event.calendarId,
-      googleEventId: event.id,
-      googleEventLink: event.htmlLink ?? undefined,
-    });
+    const created = await googleCalendar.convertEventToTask(event);
     if (!created) {
       alert(t.calendar.eventDetail.convertError);
     }
@@ -108,6 +91,8 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
       action={
         <>
           <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1">
@@ -145,7 +130,6 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
           onReorder={reorderTasks}
           onOpen={(task) => setDetailTaskId(task.id)}
           onAddTask={(status) => openNew({ status })}
-          archiveDays={archiveDays}
         />
       ) : (
         <CalendarView
@@ -154,6 +138,7 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
           onOpenTask={(task) => setDetailTaskId(task.id)}
           onOpenEvent={(event) => setDetailEvent(event)}
           onCreateOn={(date) => openNew({ dueDate: date })}
+          onConvertEvent={convertEventToTask}
         />
       )}
 
@@ -161,7 +146,7 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
         open={createItem !== null}
         task={createItem?.task ?? null}
         defaultType={createItem?.type ?? "task"}
-        googleCalendarConnected={googleCalendar.connection.connected && !googleCalendar.connection.reconnectRequired}
+        googleCalendarConnected={googleCalendar.connection.connected}
         googleCalendars={googleCalendar.calendars}
         onClose={() => setCreateItem(null)}
         onSubmit={handleCreateSubmit}
@@ -195,6 +180,7 @@ export function TodoCard({ className, archiveDays, googleCalendar }: TodoCardPro
             setDetailEvent(null);
           }
         }}
+        onConvertEvent={convertEventToTask}
       />
     </BentoCard>
   );

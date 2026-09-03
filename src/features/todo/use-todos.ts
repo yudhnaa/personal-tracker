@@ -1,13 +1,16 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { apiJson } from "../../lib/api-client";
+import { apiJson, ClientSessionChangedError } from "../../lib/api-client";
+import { captureClientCacheScope, isClientCacheScopeCurrent } from "../../lib/client-cache";
+import { createSerializedMutationQueue } from "../../lib/serialized-mutation";
 import { useApiState } from "../../lib/use-api-state";
 import { TASK_STATUSES, type Task, type TaskStatus } from "./task-types";
+import { buildTaskPatch } from "./todo-mutation";
 
 export type TaskDraft = Pick<
   Task,
-  "title" | "description" | "dueDate" | "status" | "checklist" | "googleCalendarId" | "googleEventId" | "googleEventLink" | "startAt" | "endAt" | "allDay" | "location"
->;
+  "title" | "description" | "dueDate" | "status" | "checklist" | "googleCalendarConnectionId" | "googleCalendarAccountId" | "googleCalendarId" | "googleEventId" | "googleEventLink" | "startAt" | "endAt" | "allDay" | "location"
+> & Partial<Pick<Task, "source" | "syncStatus">>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,10 +36,23 @@ function stampDone(tasks: Task[]): Task[] {
 
 /** Source of truth for tasks with grouping + CRUD + status moves. */
 export function useTodos() {
+  const queryClient = useQueryClient();
+  const [mutationQueue] = useState(() => {
+    const scope = captureClientCacheScope();
+    return createSerializedMutationQueue({
+      isActive: () => Boolean(scope.subject && isClientCacheScopeCurrent(scope)),
+      inactiveError: () => new ClientSessionChangedError(),
+    });
+  });
   const { data: tasks, setData: setRawTasks, commit, reload } = useApiState<Task[]>(
-    "/api/todos",
+    "/api/v1/todos",
     [],
   );
+
+  useEffect(() => {
+    mutationQueue.activate();
+    return () => mutationQueue.dispose();
+  }, [mutationQueue]);
 
   // Every write runs through stampDone so doneAt stays correct no matter which
   // path changed the status (dialog edit, status pill, or drag to the column).
@@ -45,16 +61,15 @@ export function useTodos() {
       stampDone(typeof updater === "function" ? updater(prev) : updater);
     setRawTasks((prev) => {
       const next = apply(prev);
-      void commit(
-        apiJson<Task[]>("/api/todos", {
-          method: "PUT",
-          body: JSON.stringify(next),
-        }),
-        async () => {
-          await reload();
-          return prev;
-        },
-      );
+      void mutationQueue.enqueue(() => commit(
+          apiJson<Task[]>("/api/v1/todos", {
+            method: "PUT",
+            body: JSON.stringify(next),
+          }),
+          async () => {
+            await reload();
+          },
+        )).catch(() => undefined);
       return next;
     });
   }
@@ -68,14 +83,19 @@ export function useTodos() {
   }, [tasks]);
 
   async function addTask(draft: TaskDraft) {
-    const created = await commit(
-      apiJson<Task>("/api/todos", {
-        method: "POST",
-        body: JSON.stringify(draft),
-      }),
-      () => tasks,
-    );
-    if (created) setRawTasks((prev) => stampDone([created, ...prev]));
+    const created = await mutationQueue.enqueue(() => commit(
+        apiJson<Task>("/api/v1/todos", {
+          method: "POST",
+          body: JSON.stringify(draft),
+        }),
+      )).catch(() => undefined);
+    if (created) {
+      setRawTasks((prev) => {
+        const exists = prev.some((task) => task.id === created.id);
+        return stampDone(exists ? prev.map((task) => (task.id === created.id ? created : task)) : [created, ...prev]);
+      });
+      removeLinkedGoogleEventFromCache(queryClient, created);
+    }
     return created ?? null;
   }
 
@@ -85,38 +105,26 @@ export function useTodos() {
 
   /** Inline auto-save: merge a partial patch into one task. */
   function patchTask(id: string, patch: Partial<Omit<Task, "id" | "createdAt">>) {
-    let nextDoneAt: number | undefined | null = patch.doneAt;
-    let didChange = false;
+    const currentTasks = queryClient.getQueryData<Task[]>(["/api/v1/todos"]) ?? tasks;
+    const target = currentTasks.find((task) => task.id === id);
+    if (!target) return;
+    const desiredTask = stampDone([{ ...target, ...patch }])[0];
 
-    setRawTasks((prev) => {
-      const target = prev.find((t) => t.id === id);
-      if (!target) return prev;
-      didChange = true;
-
-      const merged = { ...target, ...patch };
-      const afterStamp = stampDone([merged])[0];
-      nextDoneAt = afterStamp.doneAt;
-
-      return prev.map((t) => (t.id === id ? afterStamp : t));
-    });
-
-    if (!didChange) return;
-
-    const serverPatch: Record<string, any> = { ...patch };
-    if (patch.status !== undefined) {
-      serverPatch.doneAt = nextDoneAt === undefined ? null : nextDoneAt;
-    }
-
-    void commit(
-      apiJson<Task[]>(`/api/todos/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(serverPatch),
-      }),
-      async () => {
-        await reload();
-        return tasks;
-      }
+    setRawTasks((current) =>
+      current.map((task) => (task.id === id ? desiredTask : task)),
     );
+
+    const payload = buildTaskPatch(desiredTask);
+
+    void mutationQueue.enqueue(() => commit(
+        apiJson<Task[]>(`/api/v1/todos/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        }),
+        async () => {
+          await reload();
+        },
+      )).catch(() => undefined);
   }
 
   function moveTask(id: string, status: TaskStatus) {
@@ -128,23 +136,16 @@ export function useTodos() {
     setTasks(next);
   }
 
-  const queryClient = useQueryClient();
-
   function removeTask(id: string) {
     const taskToDelete = tasks.find((t) => t.id === id);
-    if (taskToDelete?.googleEventId) {
-      // Optimistically remove the linked event from the frontend calendar cache
-      // so it doesn't pop up while the backend delete job is processing.
-      queryClient.setQueriesData<{ id: string }[]>(
-        { queryKey: ["/api/google-calendar/events"] },
-        (old) => (old ? old.filter((e) => e.id !== taskToDelete.googleEventId) : old)
-      );
-    }
+    if (taskToDelete) removeLinkedGoogleEventFromCache(queryClient, taskToDelete);
     setRawTasks((prev) => prev.filter((t) => t.id !== id));
-    void commit(apiJson<Task[]>(`/api/todos/${id}`, { method: "DELETE" }), async () => {
-      await reload();
-      return tasks;
-    });
+    void mutationQueue.enqueue(() => commit(
+        apiJson<Task[]>(`/api/v1/todos/${id}`, { method: "DELETE" }),
+        async () => {
+          await reload();
+        },
+      )).catch(() => undefined);
   }
 
   return {
@@ -157,4 +158,18 @@ export function useTodos() {
     reorderTasks,
     removeTask,
   };
+}
+
+function removeLinkedGoogleEventFromCache(queryClient: ReturnType<typeof useQueryClient>, task: Task) {
+  if (!task.googleCalendarAccountId || !task.googleCalendarId || !task.googleEventId) return;
+  const calendarIds = new Set([task.googleCalendarId]);
+  if (task.googleCalendarId.includes("@")) calendarIds.add("primary");
+  queryClient.setQueriesData<{ id: string; googleAccountId?: string; calendarId?: string }[]>(
+    { queryKey: ["/api/v1/google-calendar/events"] },
+    (old) => (old ? old.filter((event) =>
+      event.id !== task.googleEventId ||
+      event.googleAccountId !== task.googleCalendarAccountId ||
+      !calendarIds.has(event.calendarId ?? "")
+    ) : old),
+  );
 }

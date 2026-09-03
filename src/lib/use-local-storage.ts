@@ -23,7 +23,10 @@ export function useLocalStorage<T>(
   const [value, setValue] = useState<T>(() => readStored(key, initialValue));
   const debounceMs = options?.debounce ?? 0;
   const valueRef = useRef(value);
-  valueRef.current = value;
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   const persist = useCallbackRef((next: T) => {
     try {

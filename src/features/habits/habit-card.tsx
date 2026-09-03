@@ -9,15 +9,35 @@ import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 
 /** Daily habit tracker: check off today, see streak + last-7-days grid. */
-export function HabitCard({ className }: { className?: string }) {
+export function HabitCard({
+  className,
+  editMode,
+  onHide,
+}: {
+  className?: string;
+  editMode?: boolean;
+  onHide?: () => void;
+}) {
   const { habits, addHabit, removeHabit, toggleToday } = useHabits();
   const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const locale = useLocale();
   const t = messages[locale].features.habits;
 
-  function submit() {
-    addHabit(draft);
-    setDraft("");
+  async function submit() {
+    if (saving || !draft.trim()) return;
+    setSaving(true);
+    setSaveError(false);
+    try {
+      const saved = await addHabit(draft);
+      if (saved) setDraft("");
+      else setSaveError(true);
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -26,6 +46,8 @@ export function HabitCard({ className }: { className?: string }) {
       title={t.title}
       scrollBody={false}
       className={className}
+      editMode={editMode}
+      onHide={onHide}
     >
       <div className="flex h-full flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-0.5">
@@ -48,7 +70,7 @@ export function HabitCard({ className }: { className?: string }) {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            void submit();
           }}
           className="mt-3 flex shrink-0 items-center gap-2"
         >
@@ -61,6 +83,7 @@ export function HabitCard({ className }: { className?: string }) {
           <Tooltip label={t.addTooltip}>
             <button
               type="submit"
+              disabled={saving}
               aria-label={t.addTooltip}
               className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full bg-btn text-btn-ink transition-colors hover:opacity-90"
             >
@@ -68,6 +91,7 @@ export function HabitCard({ className }: { className?: string }) {
             </button>
           </Tooltip>
         </form>
+        {saveError ? <p className="mt-2 text-xs text-red-600">{t.saveError}</p> : null}
       </div>
     </BentoCard>
   );

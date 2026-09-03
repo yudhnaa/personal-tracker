@@ -1,12 +1,22 @@
 export type GoogleCalendarConnectionStatus = {
   connected: boolean;
-  googleEmail: string | null;
+  connections: GoogleCalendarConnection[];
+};
+
+export type GoogleCalendarConnection = {
+  id: string;
+  googleAccountId: string;
+  connected: boolean;
+  googleEmail: string;
   selectedCalendarIds: string[];
   syncIntervalMinutes: number;
   reconnectRequired: boolean;
 };
 
 export type GoogleCalendarListItem = {
+  connectionId: string;
+  googleAccountId: string;
+  googleEmail: string;
   id: string;
   summary: string;
   primary: boolean;
@@ -16,6 +26,8 @@ export type GoogleCalendarListItem = {
 };
 
 export type GoogleCalendarEvent = {
+  connectionId: string;
+  googleAccountId: string;
   id: string;
   calendarId: string;
   title: string;
@@ -30,6 +42,7 @@ export type GoogleCalendarEvent = {
 };
 
 export type GoogleCalendarEventDraft = {
+  connectionId: string;
   calendarId: string;
   title: string;
   description?: string;

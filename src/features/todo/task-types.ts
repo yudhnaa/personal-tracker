@@ -27,18 +27,20 @@ export type Task = {
   endAt?: string;
   allDay?: boolean;
   location?: string;
+  googleCalendarConnectionId?: string;
+  googleCalendarAccountId?: string;
   googleCalendarId?: string;
   googleEventId?: string;
   googleEventLink?: string;
-  googleEventPayload?: Record<string, any>;
+  googleEventPayload?: Record<string, unknown>;
 };
 
 export const STATUS_META: Record<
   TaskStatus,
-  { label: string; dot: string; chip: string }
+  { dot: string; chip: string }
 > = {
-  backlog: { label: "Backlog", dot: "bg-zinc-400", chip: "bg-surface-muted text-ink-soft" },
-  todo: { label: "Todo", dot: "bg-sky-500", chip: "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300" },
-  doing: { label: "Doing", dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  done: { label: "Done", dot: "bg-accent", chip: "bg-accent-soft text-accent-ink" },
+  backlog: { dot: "bg-zinc-400", chip: "bg-surface-muted text-ink-soft" },
+  todo: { dot: "bg-sky-500", chip: "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300" },
+  doing: { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
+  done: { dot: "bg-accent", chip: "bg-accent-soft text-accent-ink" },
 };

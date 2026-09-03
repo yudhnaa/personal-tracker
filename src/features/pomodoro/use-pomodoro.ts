@@ -45,17 +45,20 @@ export function usePomodoro() {
   // Phase rollover when the countdown hits zero — chime + system notification.
   useEffect(() => {
     if (secondsLeft > 0) return;
-    setRunning(false);
-    playChime();
-    if (phase === "focus") {
-      notify(t.notifyFocusEndTitle, t.notifyFocusEndBody(preset.break));
-      switchTo("break");
-    } else {
-      notify(t.notifyBreakEndTitle, t.notifyBreakEndBody(preset.focus));
-      switchTo("focus");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secondsLeft]);
+    const timeout = window.setTimeout(() => {
+      setRunning(false);
+      playChime();
+      const next: Phase = phase === "focus" ? "break" : "focus";
+      if (phase === "focus") {
+        notify(t.notifyFocusEndTitle, t.notifyFocusEndBody(preset.break));
+      } else {
+        notify(t.notifyBreakEndTitle, t.notifyBreakEndBody(preset.focus));
+      }
+      setPhase(next);
+      setSecondsLeft((next === "focus" ? preset.focus : preset.break) * 60);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [phase, preset.break, preset.focus, secondsLeft, t]);
 
   function switchTo(next: Phase) {
     setPhase(next);

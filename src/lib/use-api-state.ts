@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiJson } from "./api-client";
+import { apiJson, ClientSessionChangedError } from "./api-client";
+import { captureClientCacheScope, isClientCacheScopeCurrent } from "./client-cache";
+import { runMutationRecovery, type MutationRecovery } from "./mutation-recovery";
 
 export function useApiState<T>(url: string, fallback: T, queryKey?: string[]) {
   const queryClient = useQueryClient();
-  const key = queryKey || [url];
+  const key = useMemo(() => queryKey ?? [url], [queryKey, url]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: key,
@@ -19,23 +21,36 @@ export function useApiState<T>(url: string, fallback: T, queryKey?: string[]) {
     (updater: T | ((prev: T) => T)) => {
       queryClient.setQueryData<T>(key, (old) => {
         const current = old === undefined ? fallback : old;
-        return typeof updater === "function" ? (updater as any)(current) : updater;
+        return typeof updater === "function"
+          ? (updater as (previous: T) => T)(current)
+          : updater;
       });
     },
     [queryClient, key, fallback]
   );
 
   const commit = useCallback(
-    async <R,>(request: Promise<R>, recover: () => T | Promise<T>) => {
+    async <R,>(request: Promise<R>, recover?: MutationRecovery) => {
+      const scope = captureClientCacheScope();
+      const assertActiveScope = () => {
+        if (!scope.subject || !isClientCacheScopeCurrent(scope)) {
+          throw new ClientSessionChangedError();
+        }
+      };
+      assertActiveScope();
       try {
         const result = await request;
+        assertActiveScope();
         // Invalidate to sync server state after successful mutation
         void queryClient.invalidateQueries({ queryKey: key });
         return result;
       } catch (err) {
-        const recoveredData = await recover();
-        queryClient.setQueryData<T>(key, recoveredData);
-        return undefined;
+        if (err instanceof ClientSessionChangedError || !isClientCacheScopeCurrent(scope)) {
+          throw new ClientSessionChangedError();
+        }
+        await runMutationRecovery(recover);
+        assertActiveScope();
+        throw err;
       }
     },
     [queryClient, key]

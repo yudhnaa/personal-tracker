@@ -1,4 +1,5 @@
-import { Check, Moon, Sparkles, Sun, Trash2 } from "lucide-react";
+import { Check, Moon, Sun, Trash2 } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 import { cn } from "../lib/cn";
 import { LanguageSwitcher } from "./language-switcher";
@@ -9,12 +10,7 @@ import {
 	PURGE_DAY_OPTIONS,
 	type Settings,
 } from "../lib/settings";
-import {
-	clearData,
-	countDoneOlderThan,
-	createSampleData,
-	purgeDoneOlderThan,
-} from "../lib/sample-data";
+import { countDoneOlderThan, purgeDoneOlderThan } from "../lib/archived-tasks";
 import { useConfirm } from "./confirm-dialog";
 import { FieldLabel, TextField } from "./form-controls";
 import { Modal } from "./modal";
@@ -38,6 +34,7 @@ type SettingsModalProps = {
 	locale: Locale;
 	onLocaleChange: (l: Locale) => void;
 	googleCalendar: UseGoogleCalendarResult;
+	saveError: string | null;
 };
 
 export function SettingsModal({
@@ -48,9 +45,12 @@ export function SettingsModal({
 	locale,
 	onLocaleChange,
 	googleCalendar,
+	saveError,
 }: SettingsModalProps) {
 	const confirm = useConfirm();
 	const [purgeDays, setPurgeDays] = useState(30);
+	const [purging, setPurging] = useState(false);
+	const [purgeError, setPurgeError] = useState<string | null>(null);
 	const t = messages[locale].components.settings;
 	const archiveDayLabels = t.archiveDays;
 	const purgeDayLabels = t.purgeDays;
@@ -58,47 +58,31 @@ export function SettingsModal({
 	const backgroundLabels = t.backgrounds;
 
 	async function handlePurge() {
-		const n = await countDoneOlderThan(purgeDays);
-		const ok = await confirm(
-			n === 0
-				? {
-						title: t.noTasksTitle,
-						message: t.noTasksMessage(purgeDays),
-						confirmLabel: messages[locale].components.modal.close,
-						cancelLabel: messages[locale].components.modal.close,
-					}
-				: {
-						title: t.purgeTitle(n),
-						message: t.purgeMessage(purgeDays),
-						confirmLabel: t.purgeButton,
-						danger: true,
-					},
-		);
-		if (ok) await purgeDoneOlderThan(purgeDays);
-	}
-
-	async function handleClear() {
-		if (
-			await confirm({
-				title: t.deleteAllTitle,
-				message: t.deleteAllMessage,
-				confirmLabel: t.deleteAll,
+		if (purging) return;
+		setPurging(true);
+		setPurgeError(null);
+		try {
+			const n = await countDoneOlderThan(purgeDays);
+			if (n === 0) {
+				await confirm({
+					title: t.noTasksTitle,
+					message: t.noTasksMessage(purgeDays),
+					confirmLabel: messages[locale].components.modal.close,
+					cancelLabel: messages[locale].components.confirm.cancel,
+				});
+				return;
+			}
+			const ok = await confirm({
+				title: t.purgeTitle(n),
+				message: t.purgeMessage(purgeDays),
+				confirmLabel: t.purgeButton,
 				danger: true,
-			})
-		) {
-			await clearData();
-		}
-	}
-
-	async function handleSeed() {
-		if (
-			await confirm({
-				title: t.sampleTitle,
-				message: t.sampleMessage,
-				confirmLabel: t.sampleData,
-			})
-		) {
-			await createSampleData();
+			});
+			if (ok) await purgeDoneOlderThan(purgeDays);
+		} catch (error) {
+			setPurgeError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setPurging(false);
 		}
 	}
 
@@ -109,6 +93,12 @@ export function SettingsModal({
 			onClose={onClose}
 		>
 			<div className="space-y-5">
+				{saveError ? (
+					<p className="rounded-[var(--radius-inner)] bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-200">
+						{locale === "vi" ? "Không thể lưu cài đặt: " : "Could not save settings: "}
+						{saveError}
+					</p>
+				) : null}
 				<div>
 					<FieldLabel>{t.boardTitle}</FieldLabel>
 					<TextField
@@ -195,10 +185,13 @@ export function SettingsModal({
 									)}
 								>
 									{bg.value ? (
-										<img
+										<Image
 											src={bg.value}
 											alt={backgroundLabels[index]}
-											className="h-full w-full object-cover"
+											fill
+											loading="eager"
+											sizes="(min-width: 640px) 176px, 30vw"
+											className="object-cover"
 										/>
 									) : (
 										<span className="grid h-full place-items-center text-[11px] font-medium text-ink-soft">
@@ -260,32 +253,21 @@ export function SettingsModal({
 							<button
 								type="button"
 								onClick={handlePurge}
-								className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-muted px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover"
+								disabled={purging}
+								className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-muted px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
 							>
 								<Trash2 size={15} />
 								{t.purgeButton}
 							</button>
+							</div>
+							{purgeError ? (
+								<p role="alert" className="mt-2 text-sm text-red-600">
+									{locale === "vi" ? "Không thể xóa công việc: " : "Could not purge tasks: "}
+									{purgeError}
+								</p>
+							) : null}
 						</div>
-					</div>
 
-					<div className="grid grid-cols-2 gap-2">
-						<button
-							type="button"
-							onClick={handleClear}
-							className="flex items-center justify-center gap-2 rounded-full bg-red-50 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100"
-						>
-							<Trash2 size={16} />
-							{t.deleteAll}
-						</button>
-						<button
-							type="button"
-							onClick={handleSeed}
-							className="flex items-center justify-center gap-2 rounded-full bg-surface-muted py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover"
-						>
-							<Sparkles size={16} />
-							{t.sampleData}
-						</button>
-					</div>
 				</div>
 			</div>
 		</Modal>

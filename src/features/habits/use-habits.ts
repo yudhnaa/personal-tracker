@@ -12,32 +12,34 @@ export type Habit = {
 /** Habit store: add / remove / toggle today's completion. */
 export function useHabits() {
   const { data: habits, setData: setHabits, commit, reload } = useApiState<Habit[]>(
-    "/api/habits",
+    "/api/v1/habits",
     [],
   );
 
-  function addHabit(name: string) {
+  async function addHabit(name: string): Promise<boolean> {
     const clean = name.trim();
-    if (!clean) return;
-    void commit(
-      apiJson<Habit[]>("/api/habits", {
-        method: "POST",
-        body: JSON.stringify({ name: clean }),
-      }),
-      () => habits,
-    ).then((next) => {
-      if (next) setHabits(next);
-    });
+    if (!clean) return false;
+    try {
+      const next = await commit(
+        apiJson<Habit[]>("/api/v1/habits", {
+          method: "POST",
+          body: JSON.stringify({ name: clean }),
+        }),
+      );
+      setHabits(next);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function removeHabit(id: string) {
     setHabits((prev) => prev.filter((h) => h.id !== id));
-    void commit(apiJson<Habit[]>(`/api/habits/${id}`, { method: "DELETE" }), async () => {
+    void commit(apiJson<Habit[]>(`/api/v1/habits/${id}`, { method: "DELETE" }), async () => {
       await reload();
-      return habits;
-    }).then((next) => {
-      if (next) setHabits(next);
-    });
+    })
+      .then((next) => setHabits(next))
+      .catch(() => undefined);
   }
 
   function toggleToday(id: string) {
@@ -54,12 +56,14 @@ export function useHabits() {
           : h,
       ),
     );
-    void commit(apiJson<Habit[]>(`/api/habits/${id}`, { method: "PATCH" }), async () => {
+    void commit(apiJson<Habit[]>(`/api/v1/habits/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ date: t }),
+    }), async () => {
       await reload();
-      return habits;
-    }).then((next) => {
-      if (next) setHabits(next);
-    });
+    })
+      .then((next) => setHabits(next))
+      .catch(() => undefined);
   }
 
   return { habits, addHabit, removeHabit, toggleToday };
