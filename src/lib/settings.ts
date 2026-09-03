@@ -36,6 +36,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hiddenCards: [],
 };
 
+const BACKGROUND_CACHE_KEY = "pt_dashboard_background";
+
 /** Choices for the auto-hide threshold (Settings). */
 export const ARCHIVE_DAY_OPTIONS = [
   { label: "30 ngày", value: 30 },
@@ -123,4 +125,9 @@ export function applySettings(s: Settings) {
   document.body.style.backgroundImage = s.background
     ? `${dim}url("${s.background}")`
     : "none";
+  try {
+    window.localStorage.setItem(BACKGROUND_CACHE_KEY, s.background);
+  } catch {
+    // Background selection still works when client storage is unavailable.
+  }
 }

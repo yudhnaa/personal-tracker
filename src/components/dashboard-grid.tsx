@@ -7,6 +7,8 @@ interface DashboardGridProps {
 	activeLayout: ResponsiveLayouts;
 	handleLayoutChange: (allLayouts: ResponsiveLayouts) => void;
 	editMode: boolean;
+	layoutKey?: "lg" | "sm";
+	columns?: number;
 	children: React.ReactNode;
 }
 
@@ -27,20 +29,26 @@ export function DashboardGrid({
 	activeLayout,
 	handleLayoutChange,
 	editMode,
+	layoutKey = "lg",
+	columns = 12,
 	children,
 }: DashboardGridProps) {
 	const { width, containerRef, mounted } = useContainerWidth();
 
-	const layoutItems = Array.isArray(activeLayout?.lg)
-		? activeLayout.lg
+	const layoutItems = Array.isArray(activeLayout?.[layoutKey])
+		? activeLayout[layoutKey]
 		: Array.isArray(activeLayout)
 			? activeLayout
 			: [];
 
-	const safeLayout: Layout = layoutItems.map((item) => ({
-		...item,
-		...minSizeFor(item.i),
-	}));
+	const safeLayout: Layout = layoutItems.map((item) => {
+		const minSize = minSizeFor(item.i);
+		return {
+			...item,
+			minW: Math.min(minSize.minW, columns),
+			minH: columns === 1 ? (item.minH ?? minSize.minH) : minSize.minH,
+		};
+	});
 
 	return (
 		<div
@@ -53,11 +61,11 @@ export function DashboardGrid({
 					layout={safeLayout}
 					width={width}
 					gridConfig={{
-						cols: 12,
-						rowHeight: 20,
-						margin: [8, 8] as [number, number],
+						cols: columns,
+						rowHeight: columns === 1 ? 10 : 20,
+						margin: columns === 1 ? [0, 8] as [number, number] : [8, 8] as [number, number],
 					}}
-					onLayoutChange={(newLayout: Layout) => handleLayoutChange({ lg: newLayout })}
+					onLayoutChange={(newLayout: Layout) => handleLayoutChange({ ...activeLayout, [layoutKey]: newLayout })}
 					dragConfig={{ enabled: editMode, handle: ".drag-handle" }}
 					resizeConfig={{ enabled: editMode }}
 				>

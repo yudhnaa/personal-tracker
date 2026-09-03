@@ -18,6 +18,8 @@ const SESSION_ESTABLISHING_PATHS = new Set([
   "/api/v1/auth/provisioning-status",
   "/api/v1/auth/forgot-password",
   "/api/v1/auth/reset-password",
+  "/api/v1/auth/email-verification/verify",
+  "/api/v1/auth/email-verification/resend",
 ]);
 
 let csrfTokenValue: string | null = null;

@@ -8,9 +8,10 @@ import {
 	Check,
 	Plus,
 	X,
+	ChevronDown,
 } from "lucide-react";
 import { messages, type Locale } from "@/lib/i18n";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 type DashboardHeaderProps = {
 	title: string;
@@ -25,6 +26,9 @@ type DashboardHeaderProps = {
 	onRestoreCard: (id: string) => void;
 	onAddNote: () => void;
 	addNoteLabel: string;
+	onLogout: () => void;
+	loggingOut: boolean;
+	logoutError: string;
 };
 
 /**
@@ -45,6 +49,9 @@ export function DashboardHeader({
 	onRestoreCard,
 	onAddNote,
 	addNoteLabel,
+	onLogout,
+	loggingOut,
+	logoutError,
 }: DashboardHeaderProps) {
 	const t = messages[locale];
 
@@ -65,13 +72,81 @@ export function DashboardHeader({
 				</h1>
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
-				<Link
-					href="/account"
-					className="hidden h-9 max-w-[220px] items-center gap-2 rounded-full bg-surface-muted px-3 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink sm:flex"
+				<button
+					type="button"
+					onClick={onAddNote}
+					aria-label={addNoteLabel}
+					title={addNoteLabel}
+					className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-surface-muted px-3 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover"
 				>
-					<UserCircle size={16} />
-					<span className="truncate">{userEmail}</span>
-				</Link>
+					<Plus size={16} />
+					<span className="hidden sm:inline">{addNoteLabel}</span>
+				</button>
+
+				<Popover>
+					<PopoverTrigger asChild>
+						<button
+							type="button"
+							aria-label={t.nav.account}
+							className="flex h-9 max-w-[220px] items-center gap-2 rounded-full bg-surface-muted px-3 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
+						>
+							<UserCircle size={16} />
+							<span className="hidden truncate sm:inline">{userEmail}</span>
+							<ChevronDown size={14} aria-hidden="true" />
+						</button>
+					</PopoverTrigger>
+					<PopoverContent align="end" className="w-56 p-2">
+						<PopoverClose asChild>
+							<Link
+								href="/account"
+								className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-hover"
+							>
+								<UserCircle size={16} />
+								{t.nav.account}
+							</Link>
+						</PopoverClose>
+						<div className="my-1 border-t border-line" />
+						{editMode ? (
+							<>
+								<PopoverClose asChild>
+									<button type="button" onClick={onSaveEdit} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
+										<Check size={16} />
+										{t.dashboard.saveLayout}
+									</button>
+								</PopoverClose>
+								<PopoverClose asChild>
+									<button type="button" onClick={onCancelEdit} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
+										<X size={16} />
+										{t.dashboard.cancelLayout}
+									</button>
+								</PopoverClose>
+							</>
+						) : (
+							<PopoverClose asChild>
+								<button type="button" onClick={onStartEdit} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
+									<LayoutGrid size={16} />
+									{t.dashboard.editLayout}
+								</button>
+							</PopoverClose>
+						)}
+						<PopoverClose asChild>
+							<button type="button" onClick={onOpenSettings} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
+								<SettingsIcon size={16} />
+								{t.dashboard.settings}
+							</button>
+						</PopoverClose>
+						<div className="my-1 border-t border-line" />
+						<button
+							type="button"
+							onClick={onLogout}
+							disabled={loggingOut}
+							className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+						>
+							{loggingOut ? "Signing out…" : t.auth.logout}
+						</button>
+						{logoutError ? <p role="alert" className="px-2 pt-2 text-xs text-red-600 dark:text-red-400">{logoutError}</p> : null}
+					</PopoverContent>
+				</Popover>
 
 				{hiddenCards.length > 0 && (
 					<Popover>
@@ -106,63 +181,6 @@ export function DashboardHeader({
 					</Popover>
 				)}
 
-				{editMode ? (
-					<>
-						<button
-							type="button"
-							onClick={onCancelEdit}
-							aria-label={t.dashboard.cancelLayout}
-							title={t.dashboard.cancelLayout}
-							className="flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
-						>
-							<X size={16} />
-							<span className="hidden sm:inline">{t.dashboard.cancelLayout}</span>
-						</button>
-						<button
-							type="button"
-							onClick={onSaveEdit}
-							aria-label={t.dashboard.saveLayout}
-							title={t.dashboard.saveLayout}
-							className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-accent px-3 text-sm font-semibold text-accent-ink transition-colors hover:opacity-90"
-						>
-							<Check size={16} />
-							<span className="hidden sm:inline">{t.dashboard.saveLayout}</span>
-						</button>
-					</>
-				) : (
-					<button
-						type="button"
-						onClick={onStartEdit}
-						aria-label={t.dashboard.editLayout}
-						title={t.dashboard.editLayout}
-						className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-surface-muted px-3 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover"
-					>
-						<LayoutGrid size={16} />
-						<span className="hidden sm:inline">{t.dashboard.editLayout}</span>
-					</button>
-				)}
-
-				<button
-					type="button"
-					onClick={onAddNote}
-					aria-label={addNoteLabel}
-					title={addNoteLabel}
-					className="hidden h-9 shrink-0 items-center gap-2 rounded-full bg-surface-muted px-3 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover lg:flex"
-				>
-					<Plus size={16} />
-					<span className="hidden sm:inline">{addNoteLabel}</span>
-				</button>
-
-				<button
-					type="button"
-					onClick={onOpenSettings}
-					aria-label={t.dashboard.settings}
-					title={t.dashboard.settings}
-					className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-btn pl-3.5 pr-4 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
-				>
-					<SettingsIcon size={16} />
-					<span className="hidden sm:inline">{t.dashboard.settings}</span>
-				</button>
 			</div>
 		</header>
 	);

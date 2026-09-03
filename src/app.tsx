@@ -3,6 +3,8 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { type Layout, type ResponsiveLayouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -12,7 +14,7 @@ import { DashboardGrid } from "./components/dashboard-grid";
 import { SettingsModal } from "./components/settings-modal";
 import { StorageAlert } from "./components/storage-alert";
 import { WelcomeModal } from "./components/welcome-modal";
-import { apiJson, ClientSessionChangedError } from "./lib/api-client";
+import { ApiError, apiJson, ClientSessionChangedError } from "./lib/api-client";
 import { useApiState } from "./lib/use-api-state";
 import { useSettings } from "./lib/use-settings";
 import { BookmarkCard } from "./features/bookmarks/bookmark-card";
@@ -26,6 +28,10 @@ import { messages, type Locale } from "./lib/i18n";
 import { useGoogleCalendar } from "./features/google-calendar/use-google-calendar";
 import { useMediaQuery } from "./lib/use-media-query";
 import { DEFAULT_SETTINGS } from "./lib/settings";
+import type { Account } from "./lib/auth-client";
+import { clearUserCache } from "./lib/client-cache";
+import { resolveLogoutSession } from "./lib/logout-session";
+import { CURRENT_ACCOUNT_QUERY_KEY } from "./lib/use-required-account";
 
 export function App({
 	accountId,
@@ -36,10 +42,14 @@ export function App({
 	userEmail: string;
 	initialLocale: Locale;
 }) {
+	const router = useRouter();
+	const queryClient = useQueryClient();
 	const { settings, update, saveError: settingsSaveError } = useSettings(accountId);
 	const googleCalendar = useGoogleCalendar();
 	const { notes, addNote, patchNote: patchStoredNote, removeNote: removeStoredNote } = useNotes(accountId);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [loggingOut, setLoggingOut] = useState(false);
+	const [logoutError, setLogoutError] = useState("");
 	const [locale, setLocale] = useState<Locale>(initialLocale);
 	const {
 		data: welcomed,
@@ -68,6 +78,29 @@ export function App({
 			if (error instanceof ClientSessionChangedError) return;
 			setWelcomed(false);
 		}
+	}
+
+	async function logout() {
+		if (loggingOut) return;
+		setLoggingOut(true);
+		setLogoutError("");
+		const result = await resolveLogoutSession(
+			() => apiJson<void>("/api/v1/auth/logout", { method: "POST" }),
+			() => apiJson<Account>("/api/v1/auth/me"),
+			(error) => error instanceof ApiError && [401, 403].includes(error.status),
+		);
+
+		if (!result.ended) {
+			if (result.account) queryClient.setQueryData(CURRENT_ACCOUNT_QUERY_KEY, result.account);
+			setLogoutError(result.error instanceof Error ? result.error.message : "Could not sign out. Please try again.");
+			setLoggingOut(false);
+			return;
+		}
+
+		queryClient.clear();
+		clearUserCache();
+		router.replace("/login");
+		router.refresh();
 	}
 
 	const noteIds = useMemo(() => notes.map((note) => note.id), [notes]);
@@ -100,7 +133,7 @@ export function App({
 	};
 
 	const handleLayoutChange = (allLayouts: ResponsiveLayouts) => {
-		if (editMode && isDesktop) {
+		if (editMode) {
 			setLocalLayout(allLayouts);
 		}
 	};
@@ -148,35 +181,35 @@ export function App({
 			<TodoCard
 				className="h-full"
 				googleCalendar={googleCalendar}
-				editMode={editMode && isDesktop}
+				editMode={editMode}
 				onHide={() => handleHideCard("todo")}
 			/>
 		),
 		pomodoro: (
 			<PomodoroCard
 				className="h-full"
-				editMode={editMode && isDesktop}
+				editMode={editMode}
 				onHide={() => handleHideCard("pomodoro")}
 			/>
 		),
 		bookmarks: (
 			<BookmarkCard
 				className="h-full"
-				editMode={editMode && isDesktop}
+				editMode={editMode}
 				onHide={() => handleHideCard("bookmarks")}
 			/>
 		),
 		habits: (
 			<HabitCard
 				className="h-full"
-				editMode={editMode && isDesktop}
+				editMode={editMode}
 				onHide={() => handleHideCard("habits")}
 			/>
 		),
 		subscriptions: (
 			<SubscriptionCard
 				className="h-full"
-				editMode={editMode && isDesktop}
+				editMode={editMode}
 				onHide={() => handleHideCard("subscriptions")}
 			/>
 		),
@@ -188,7 +221,7 @@ export function App({
 			<NotesCard
 				note={note}
 				className="h-full"
-				editMode={editMode && isDesktop}
+				editMode={editMode}
 				onHide={() => handleHideCard(id)}
 				onPatch={(patch) => patchNote(note.id, patch)}
 				onDelete={() => removeNote(note.id)}
@@ -204,7 +237,7 @@ export function App({
 					userEmail={userEmail}
 					locale={locale}
 					onOpenSettings={() => setSettingsOpen(true)}
-					editMode={editMode && isDesktop}
+					editMode={editMode}
 					onStartEdit={handleStartEdit}
 					onSaveEdit={handleSaveEdit}
 					onCancelEdit={handleCancelEdit}
@@ -212,59 +245,29 @@ export function App({
 					onRestoreCard={handleRestoreCard}
 					onAddNote={handleAddNote}
 					addNoteLabel={messages[locale].features.notes.addNote}
+					onLogout={logout}
+					loggingOut={loggingOut}
+					logoutError={logoutError}
 				/>
-				{isDesktop ? (
-					<motion.div
-						initial={reduceMotion ? false : { opacity: 0, y: 14 }}
-						animate={{ opacity: 1, y: 0 }}
-						transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
-						className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+				<motion.div
+					initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+					className={isDesktop ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "w-full"}
+				>
+					<DashboardGrid
+						activeLayout={activeLayout}
+						handleLayoutChange={handleLayoutChange}
+						editMode={editMode}
+						layoutKey={isDesktop ? "lg" : "sm"}
+						columns={isDesktop ? 12 : 1}
 					>
-						<DashboardGrid
-							activeLayout={activeLayout}
-							handleLayoutChange={handleLayoutChange}
-							editMode={editMode}
-						>
-								{Object.entries(cards).map(([id, card]) => {
-									if (hiddenCardsSet.has(id) || (id === noteCardId(noteIds[0] ?? "") && hiddenCardsSet.has("notes"))) return null;
-									return (
-										<div key={id} className="h-full w-full">
-											{card}
-										</div>
-									);
-								})}
-						</DashboardGrid>
-					</motion.div>
-				) : (
-					<motion.div
-						initial={reduceMotion ? false : { opacity: 0, y: 14 }}
-						animate={{ opacity: 1, y: 0 }}
-						transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
-						className="flex min-h-0 flex-1 flex-col gap-2"
-					>
-						{!hiddenCardsSet.has("todo") ? <div className="min-h-[460px]">{cards.todo}</div> : null}
-						{!hiddenCardsSet.has("pomodoro") || notes.some((note, index) => (
-							!hiddenCardsSet.has(noteCardId(note.id))
-							&& !(index === 0 && hiddenCardsSet.has("notes"))
-						)) ? (
-							<div className="flex flex-col gap-2">
-								{!hiddenCardsSet.has("pomodoro") ? <div className="min-h-[320px] shrink-0">{cards.pomodoro}</div> : null}
-								{notes.map((note, index) => {
-									const id = noteCardId(note.id);
-									if (hiddenCardsSet.has(id) || (index === 0 && hiddenCardsSet.has("notes"))) return null;
-									return (
-										<div key={note.id} className="min-h-[320px] flex-1">
-											{cards[id]}
-										</div>
-									);
-								})}
-							</div>
-						) : null}
-						{!hiddenCardsSet.has("bookmarks") ? <div className="min-h-[320px]">{cards.bookmarks}</div> : null}
-						{!hiddenCardsSet.has("habits") ? <div className="min-h-[320px]">{cards.habits}</div> : null}
-						{!hiddenCardsSet.has("subscriptions") ? <div className="min-h-[360px]">{cards.subscriptions}</div> : null}
-					</motion.div>
-				)}
+						{Object.entries(cards).map(([id, card]) => {
+							if (hiddenCardsSet.has(id) || (id === noteCardId(noteIds[0] ?? "") && hiddenCardsSet.has("notes"))) return null;
+							return <div key={id} className="h-full w-full">{card}</div>;
+						})}
+					</DashboardGrid>
+				</motion.div>
 			</div>
 
 			<SettingsModal
@@ -326,5 +329,62 @@ function normalizeLayoutForNotes(layout: ResponsiveLayouts | null, noteIds: stri
 		normalized.push({ ...item, y });
 	}
 
-	return { ...source, lg: normalized };
+	return {
+		...source,
+		lg: normalized,
+		sm: normalizeMobileLayout(source?.sm, normalized, noteIds),
+	};
+}
+
+function normalizeMobileLayout(
+	saved: ReadonlyArray<Layout[number]> | undefined,
+	lg: Layout[number][],
+	noteIds: string[],
+): Layout[number][] {
+	const firstNoteId = noteIds[0] ? noteCardId(noteIds[0]) : null;
+	const noteIdSet = new Set(noteIds.map(noteCardId));
+	const source = (saved?.length ? saved : lg)
+		.slice()
+		.sort((left, right) => (left.y - right.y) || (left.x - right.x));
+	const normalized: Layout[number][] = [];
+	let migratedFirstNote = false;
+
+	for (const item of source) {
+		let id = item.i;
+		if (id === "notes") {
+			if (!firstNoteId || migratedFirstNote) continue;
+			id = firstNoteId;
+			migratedFirstNote = true;
+		}
+		if (id.startsWith("note:") && !noteIdSet.has(id)) continue;
+		if (normalized.some((existing) => existing.i === id)) continue;
+		normalized.push({ ...item, i: id });
+	}
+
+	for (const item of lg) {
+		if (item.i === "notes") continue;
+		if (normalized.some((existing) => existing.i === item.i)) continue;
+		normalized.push(item);
+	}
+
+	let y = 0;
+	return normalized.map((item) => {
+		const minH = mobileMinimumHeight(item.i);
+		const h = saved?.length ? Math.max(item.h ?? 0, minH) : mobileCardHeight(item.i);
+		const layoutItem = { ...item, x: 0, y, w: 1, h, minW: 1, minH };
+		y += h;
+		return layoutItem;
+	});
+}
+
+function mobileCardHeight(id: string): number {
+	if (id === "todo") return 40;
+	if (id === "subscriptions") return 30;
+	return 28;
+}
+
+function mobileMinimumHeight(id: string): number {
+	if (id === "todo") return 28;
+	if (id === "subscriptions") return 24;
+	return 20;
 }

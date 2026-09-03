@@ -5,13 +5,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AuthShell } from "./auth-shell";
 import { messages, type Locale } from "@/lib/i18n";
-import { GoogleCalendarSettingsPanel } from "@/features/google-calendar/google-calendar-settings-panel";
-import { useGoogleCalendar } from "@/features/google-calendar/use-google-calendar";
-import { ApiError, apiJson } from "@/lib/api-client";
-import type { Account } from "@/lib/auth-client";
+import { apiJson } from "@/lib/api-client";
 import { clearUserCache } from "@/lib/client-cache";
-import { resolveLogoutSession } from "@/lib/logout-session";
-import { CURRENT_ACCOUNT_QUERY_KEY } from "@/lib/use-required-account";
 
 export function AccountPage({
 	email,
@@ -23,12 +18,10 @@ export function AccountPage({
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const t = messages[initialLocale].auth;
-	const googleCalendar = useGoogleCalendar();
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 		const [message, setMessage] = useState("");
 		const [changingPassword, setChangingPassword] = useState(false);
-	const [loggingOut, setLoggingOut] = useState(false);
 
 	async function changePassword(event: React.FormEvent) {
 			event.preventDefault();
@@ -51,39 +44,8 @@ export function AccountPage({
 		}
 	}
 
-	async function logout() {
-		if (loggingOut) return;
-		setLoggingOut(true);
-		setMessage("");
-		const result = await resolveLogoutSession(
-			() => apiJson<void>("/api/v1/auth/logout", { method: "POST" }),
-			() => apiJson<Account>("/api/v1/auth/me"),
-			(error) => error instanceof ApiError && [401, 403].includes(error.status),
-		);
-
-		if (!result.ended) {
-			if (result.account) {
-				queryClient.setQueryData(CURRENT_ACCOUNT_QUERY_KEY, result.account);
-			}
-			setMessage(
-				result.error instanceof Error
-					? result.error.message
-					: initialLocale === "vi"
-						? "Không thể đăng xuất. Vui lòng thử lại."
-						: "Could not sign out. Please try again.",
-			);
-			setLoggingOut(false);
-			return;
-		}
-
-		queryClient.clear();
-		clearUserCache();
-		router.replace("/login");
-		router.refresh();
-	}
-
 	return (
-		<AuthShell locale={initialLocale}>
+		<AuthShell locale={initialLocale} authenticated>
 			<section className="w-full max-w-md rounded-[var(--radius-card)] bg-surface-sunken p-6">
 				<h1 className="text-2xl font-semibold">{t.profile}</h1>
 				<p className="mt-2 text-sm text-ink-soft">{email}</p>
@@ -125,21 +87,6 @@ export function AccountPage({
 						{message}
 					</p>
 				) : null}
-				<button
-					type="button"
-					onClick={logout}
-					disabled={loggingOut}
-					className="mt-4 w-full rounded-full bg-surface px-4 py-3 text-sm font-semibold text-ink"
-				>
-					{t.logout}
-				</button>
-
-				<div className="mt-4">
-					<GoogleCalendarSettingsPanel
-						calendar={googleCalendar}
-						locale={initialLocale}
-					/>
-				</div>
 			</section>
 		</AuthShell>
 	);

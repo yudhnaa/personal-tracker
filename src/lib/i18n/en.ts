@@ -125,7 +125,15 @@ export const en = {
 		currentPassword: "Current password",
 		profile: "Profile",
 		logout: "Log out",
-		resetPasswordSuccess: "Password has been reset successfully.",
+			resetPasswordSuccess: "Password has been reset successfully.",
+			verificationEmailSent: "Check your email to verify your account before signing in.",
+			resendVerification: "Resend verification email",
+			verificationResent: "If this account still needs verification, a new email has been sent.",
+			verifyEmailTitle: "Verify your email",
+			verifyEmailSuccess: "Your email has been verified. You can now sign in.",
+			verifyEmailAction: "Verify email",
+			verifyingEmail: "Verifying your email…",
+			verifyEmailMissingToken: "This verification link is incomplete.",
 	},
 	features: {
 		habits: {

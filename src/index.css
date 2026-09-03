@@ -143,10 +143,10 @@
         font-family: var(--font-sans);
         color: var(--color-ink);
         -webkit-font-smoothing: antialiased;
-        /* Photographic background sitting behind the translucent shell.
-       The image is set at runtime from settings; this is the default. */
+        /* The saved image is restored before hydration; first-time visitors
+           receive a neutral backdrop until their settings load. */
         background-color: #6b5566;
-        background-image: url("/bg-2.jpg");
+        background-image: var(--initial-dashboard-background, none);
         background-size: cover;
         background-position: center;
         background-attachment: fixed;

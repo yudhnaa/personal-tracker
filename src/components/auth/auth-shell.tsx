@@ -8,9 +8,11 @@ import { messages, type Locale } from "@/lib/i18n";
 export function AuthShell({
   children,
   locale,
+  authenticated = false,
 }: {
   children: React.ReactNode;
   locale: Locale;
+  authenticated?: boolean;
 }) {
   const t = messages[locale];
   return (
@@ -24,8 +26,8 @@ export function AuthShell({
           </Link>
           <div className="flex min-w-0 items-center justify-between gap-3 sm:justify-end">
             <LanguageSwitcher locale={locale} />
-            <Link href="/dashboard" className="text-sm font-semibold text-ink-soft hover:text-ink">
-              {t.nav.dashboard}
+            <Link href={authenticated ? "/dashboard" : "/login"} className="text-sm font-semibold text-ink-soft hover:text-ink">
+              {authenticated ? t.nav.dashboard : t.nav.login}
             </Link>
           </div>
         </nav>

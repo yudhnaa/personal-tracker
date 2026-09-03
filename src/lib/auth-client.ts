@@ -23,11 +23,18 @@ type ProvisioningStatus = {
   retryAfterMs?: number;
 };
 
+export type EmailVerificationPending = {
+  status: "EMAIL_VERIFICATION_REQUIRED";
+  email: string;
+};
+
+export type AuthenticationResult = Account | EmailVerificationPending;
+
 export async function authenticate(
   mode: "login" | "register",
   input: { email: string; password: string; displayName?: string },
-): Promise<Account> {
-  const { data, status } = await apiJsonWithStatus<Account | ProvisioningPending>(
+): Promise<AuthenticationResult> {
+  const { data, status } = await apiJsonWithStatus<Account | ProvisioningPending | EmailVerificationPending>(
     `/api/v1/auth/${mode}`,
     {
       method: "POST",
@@ -38,6 +45,9 @@ export async function authenticate(
   );
 
   if (status === 202) {
+    if ((data as EmailVerificationPending).status === "EMAIL_VERIFICATION_REQUIRED") {
+      return data as EmailVerificationPending;
+    }
     await waitForProvisioning((data as ProvisioningPending).retryAfterMs);
     const account = await apiJson<Account>("/api/v1/auth/me");
     scopeClientCache(account.id);

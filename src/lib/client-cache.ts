@@ -7,6 +7,7 @@ const subjectListeners = new Set<() => void>();
 const LEGACY_USER_CACHE_KEYS = [
   "pt_query_cache",
   "dashboard_settings_cache",
+	"pt_dashboard_background",
   "pt_welcomed",
 ];
 

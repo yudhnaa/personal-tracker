@@ -133,7 +133,15 @@ export const vi: Messages = {
 		currentPassword: "Mật khẩu hiện tại",
 		profile: "Hồ sơ",
 		logout: "Đăng xuất",
-		resetPasswordSuccess: "Đặt lại mật khẩu thành công.",
+			resetPasswordSuccess: "Đặt lại mật khẩu thành công.",
+			verificationEmailSent: "Hãy kiểm tra email để xác minh tài khoản trước khi đăng nhập.",
+			resendVerification: "Gửi lại email xác minh",
+			verificationResent: "Nếu tài khoản này vẫn cần xác minh, một email mới đã được gửi.",
+			verifyEmailTitle: "Xác minh email",
+			verifyEmailSuccess: "Email đã được xác minh. Bạn có thể đăng nhập.",
+			verifyEmailAction: "Xác minh email",
+			verifyingEmail: "Đang xác minh email…",
+			verifyEmailMissingToken: "Liên kết xác minh này không đầy đủ.",
 	},
 	features: {
 		habits: {
