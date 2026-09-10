@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { cn } from "../../lib/cn";
+import { toIsoDate } from "../../lib/date";
 import { Modal } from "../../components/modal";
 import { DatePicker } from "../../components/ui/date-picker";
 import { TaskChecklist } from "./task-checklist";
@@ -118,13 +119,14 @@ function TaskDialogForm({
     );
     setSaving(true);
     setSubmitError(null);
+    const normalizedDraft = draft.allDay ? draft : normalizeDraftTimedRange(draft, draft, false, false);
     try {
       const saved = await onSubmit({
-        ...draft,
-        title: draft.title.trim(),
-        googleCalendarConnectionId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarConnectionId : undefined,
-        googleCalendarAccountId: (draft.startAt || draft.dueDate || draft.type === "event") ? selectedCalendar?.googleAccountId ?? draft.googleCalendarAccountId : undefined,
-        googleCalendarId: (draft.startAt || draft.dueDate || draft.type === "event") ? draft.googleCalendarId : undefined,
+        ...normalizedDraft,
+        title: normalizedDraft.title.trim(),
+        googleCalendarConnectionId: (normalizedDraft.startAt || normalizedDraft.dueDate || normalizedDraft.type === "event") ? normalizedDraft.googleCalendarConnectionId : undefined,
+        googleCalendarAccountId: (normalizedDraft.startAt || normalizedDraft.dueDate || normalizedDraft.type === "event") ? selectedCalendar?.googleAccountId ?? normalizedDraft.googleCalendarAccountId : undefined,
+        googleCalendarId: (normalizedDraft.startAt || normalizedDraft.dueDate || normalizedDraft.type === "event") ? normalizedDraft.googleCalendarId : undefined,
       });
       if (saved) onClose();
       else setSubmitError(t.dialog.saveError);
@@ -270,15 +272,16 @@ function TaskDialogForm({
                       : ""
                   }
                   onChange={(e) => {
-                    const iso = e.target.value ? new Date(e.target.value).toISOString() : "";
-                    setDraft((d) => ({
+                    const date = e.target.value ? new Date(e.target.value) : null;
+                    const iso = date ? date.toISOString() : "";
+                    setDraft((d) => normalizeDraftTimedRange(d, {
                       ...d,
                       startAt: iso,
-                      dueDate: iso ? iso.slice(0, 10) : "",
+                      dueDate: date ? toIsoDate(date) : "",
                     googleCalendarConnectionId: iso ? d.googleCalendarConnectionId || enabledGoogleCalendars[0]?.connectionId || "" : "",
                     googleCalendarAccountId: iso ? d.googleCalendarAccountId || enabledGoogleCalendars[0]?.googleAccountId || "" : "",
                     googleCalendarId: iso ? d.googleCalendarId || enabledGoogleCalendars[0]?.id || "" : "",
-                    }));
+                    }, true, false));
                   }}
                   className="w-full flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
                 />
@@ -291,7 +294,7 @@ function TaskDialogForm({
                   }
                   onChange={(e) => {
                     const iso = e.target.value ? new Date(e.target.value).toISOString() : "";
-                    setDraft((d) => ({ ...d, endAt: iso }));
+                    setDraft((d) => normalizeDraftTimedRange(d, { ...d, endAt: iso }, false, true));
                   }}
                   className="w-full flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
                 />
@@ -402,4 +405,30 @@ function parseCalendarSelectValue(value: string) {
     connectionId: decodeURIComponent(connectionId),
     calendarId: decodeURIComponent(calendarId),
   };
+}
+
+const MIN_EVENT_DURATION_MS = 30 * 60 * 1000;
+
+function normalizeDraftTimedRange(
+  previous: ItemDialogDraft,
+  next: ItemDialogDraft,
+  startChanged: boolean,
+  endChanged: boolean,
+): ItemDialogDraft {
+  if (next.allDay || !next.startAt || !next.endAt) return next;
+  const startMs = Date.parse(next.startAt);
+  const endMs = Date.parse(next.endAt);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs > startMs) return next;
+
+  const previousDuration = Math.max(
+    MIN_EVENT_DURATION_MS,
+    Date.parse(previous.endAt ?? "") - Date.parse(previous.startAt ?? "") || MIN_EVENT_DURATION_MS,
+  );
+  if (startChanged && !endChanged) {
+    return { ...next, endAt: new Date(startMs + previousDuration).toISOString() };
+  }
+  if (endChanged && !startChanged) {
+    return { ...next, startAt: new Date(endMs - previousDuration).toISOString() };
+  }
+  return { ...next, endAt: new Date(startMs + MIN_EVENT_DURATION_MS).toISOString() };
 }

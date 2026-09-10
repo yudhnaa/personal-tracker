@@ -233,6 +233,59 @@ test("gateway requests reject absolute URLs before credentials or security heade
   delete globalThis.window;
 });
 
+test("FormData keeps the browser-generated multipart boundary while retaining session safeguards", async () => {
+  globalThis.window = { localStorage: new MemoryStorage(), sessionStorage: new MemoryStorage() };
+  const { api, cache } = await importApiClientModule();
+  cache.scopeClientCache("account-a");
+  let capturedInit;
+  globalThis.fetch = async (input, init = {}) => {
+    if (new URL(String(input)).pathname === "/api/v1/auth/csrf") {
+      return Response.json({ csrfToken: "csrf-wallpaper" });
+    }
+    capturedInit = init;
+    return Response.json({ hasWallpaper: true });
+  };
+
+  const body = new FormData();
+  body.set("wallpaper", new Blob(["png"], { type: "image/png" }), "wallpaper.png");
+  await api.gatewayFetch("/api/v1/wallpaper/wallpaper", { method: "PUT", body });
+
+  const headers = new Headers(capturedInit.headers);
+  assert.equal(headers.has("content-type"), false, "fetch must generate the multipart boundary");
+  assert.equal(headers.get("x-client-account-id"), "account-a");
+  assert.ok(headers.get("x-csrf-token"));
+  assert.equal(capturedInit.body, body);
+  delete globalThis.window;
+});
+
+test("Wallpaper Agenda is launched from the account menu instead of Settings", async () => {
+  const [header, app, settingsModal, wallpaperModal, wallpaperPanel, englishMessages, vietnameseMessages] = await Promise.all([
+    readFile(new URL("../src/components/dashboard-header.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/settings-modal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/wallpaper/wallpaper-agenda-modal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/wallpaper/wallpaper-settings-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/lib/i18n/en.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/lib/i18n/vi.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(header, /onOpenWallpaperAgenda/);
+  assert.match(header, /t\.dashboard\.wallpaperAgenda/);
+  assert.match(app, /<WallpaperAgendaModal/);
+  assert.match(app, /setWallpaperAgendaOpen\(true\)/);
+  assert.doesNotMatch(settingsModal, /WallpaperSettingsPanel/);
+  assert.match(wallpaperModal, /<WallpaperSettingsPanel locale=\{locale\} \/>/);
+  assert.match(wallpaperPanel, /shortcutMethod\}: POST/);
+  assert.match(wallpaperPanel, /shortcutAuthorization\}: Bearer/);
+  assert.match(wallpaperPanel, /multipart\/form-data/);
+  assert.match(wallpaperPanel, /shortcutRangeField\}: \$\{range\}/);
+  assert.match(wallpaperPanel, /shortcutWallpaperField\}: wallpaper/);
+  assert.match(englishMessages, /wallpaperAgenda: "Wallpaper Agenda"/);
+  assert.match(englishMessages, /shortcutTokenPlaceholder: "<Shortcut token>"/);
+  assert.match(vietnameseMessages, /wallpaperAgenda: "Lịch trên hình nền"/);
+  assert.match(vietnameseMessages, /shortcutTokenPlaceholder: "<Token Shortcut>"/);
+});
+
 test("logout errors are reconciled against the current server session", async () => {
   const { resolveLogoutSession } = await importTypeScriptModule("../src/lib/logout-session.ts");
   const unauthenticated = (error) => error?.status === 401;

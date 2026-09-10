@@ -48,9 +48,9 @@ export function CalendarView({
 		endStr: string | null | undefined,
 		isGoogleAllDay: boolean,
 	): string[] {
-		const startIso = startStr.slice(0, 10);
+		const startIso = calendarDateKey(startStr, isGoogleAllDay);
 		if (!endStr) return [startIso];
-		const endIso = endStr.slice(0, 10);
+		const endIso = calendarDateKey(endStr, isGoogleAllDay);
 		if (startIso === endIso) return [startIso];
 
 		const dates: string[] = [];
@@ -74,9 +74,9 @@ export function CalendarView({
 	const byDate = useMemo(() => {
 		const map = new Map<string, Task[]>();
 		for (const t of tasks) {
-			const startStr = t.startAt || t.dueDate;
+			const startStr = t.dueDate || t.startAt;
 			if (!startStr) continue;
-			const dates = getSpanDates(startStr, t.endAt, false);
+			const dates = getSpanDates(startStr, t.endAt, t.allDay ?? false);
 			for (const dateKey of dates) {
 				const list = map.get(dateKey) ?? [];
 				list.push(t);
@@ -504,6 +504,12 @@ function buildDayItems(
 
 function eventKey(googleAccountId: string, calendarId: string, eventId: string) {
 	return `${googleAccountId}:${calendarId}:${eventId}`;
+}
+
+function calendarDateKey(value: string, allDay: boolean) {
+	if (allDay || /^\d{4}-\d{2}-\d{2}$/.test(value)) return value.slice(0, 10);
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? value.slice(0, 10) : toIsoDate(date);
 }
 
 function eventSortKey(event: GoogleCalendarEvent) {

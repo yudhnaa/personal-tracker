@@ -14,6 +14,7 @@ import { DashboardGrid } from "./components/dashboard-grid";
 import { SettingsModal } from "./components/settings-modal";
 import { StorageAlert } from "./components/storage-alert";
 import { WelcomeModal } from "./components/welcome-modal";
+import { WallpaperAgendaModal } from "./features/wallpaper/wallpaper-agenda-modal";
 import { ApiError, apiJson, ClientSessionChangedError } from "./lib/api-client";
 import { useApiState } from "./lib/use-api-state";
 import { useSettings } from "./lib/use-settings";
@@ -48,6 +49,7 @@ export function App({
 	const googleCalendar = useGoogleCalendar();
 	const { notes, addNote, patchNote: patchStoredNote, removeNote: removeStoredNote } = useNotes(accountId);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [wallpaperAgendaOpen, setWallpaperAgendaOpen] = useState(false);
 	const [loggingOut, setLoggingOut] = useState(false);
 	const [logoutError, setLogoutError] = useState("");
 	const [locale, setLocale] = useState<Locale>(initialLocale);
@@ -237,6 +239,7 @@ export function App({
 					userEmail={userEmail}
 					locale={locale}
 					onOpenSettings={() => setSettingsOpen(true)}
+					onOpenWallpaperAgenda={() => setWallpaperAgendaOpen(true)}
 					editMode={editMode}
 					onStartEdit={handleStartEdit}
 					onSaveEdit={handleSaveEdit}
@@ -279,6 +282,12 @@ export function App({
 				saveError={settingsSaveError}
 				onClose={() => setSettingsOpen(false)}
 				onUpdate={update}
+			/>
+
+			<WallpaperAgendaModal
+				open={wallpaperAgendaOpen}
+				locale={locale}
+				onClose={() => setWallpaperAgendaOpen(false)}
 			/>
 
 			<WelcomeModal

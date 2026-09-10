@@ -9,6 +9,7 @@ import {
 	Plus,
 	X,
 	ChevronDown,
+	Image as ImageIcon,
 } from "lucide-react";
 import { messages, type Locale } from "@/lib/i18n";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -18,6 +19,7 @@ type DashboardHeaderProps = {
 	userEmail: string;
 	locale: Locale;
 	onOpenSettings: () => void;
+	onOpenWallpaperAgenda: () => void;
 	editMode: boolean;
 	onStartEdit: () => void;
 	onSaveEdit: () => void;
@@ -41,6 +43,7 @@ export function DashboardHeader({
 	userEmail,
 	locale,
 	onOpenSettings,
+	onOpenWallpaperAgenda,
 	editMode,
 	onStartEdit,
 	onSaveEdit,
@@ -133,6 +136,12 @@ export function DashboardHeader({
 							<button type="button" onClick={onOpenSettings} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
 								<SettingsIcon size={16} />
 								{t.dashboard.settings}
+							</button>
+						</PopoverClose>
+						<PopoverClose asChild>
+							<button type="button" onClick={onOpenWallpaperAgenda} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-surface-hover">
+								<ImageIcon size={16} />
+								{t.dashboard.wallpaperAgenda}
 							</button>
 						</PopoverClose>
 						<div className="my-1 border-t border-line" />
