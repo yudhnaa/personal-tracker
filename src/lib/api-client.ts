@@ -157,7 +157,7 @@ export async function gatewayFetch(path: string, init: RequestInit = {}): Promis
     assertClientCacheScope(scope);
     const headers = new Headers(init.headers);
     if (scope?.subject) headers.set("x-client-account-id", scope.subject);
-    if (init.body != null && !headers.has("content-type")) {
+    if (init.body != null && !(init.body instanceof FormData) && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
     let csrfTokenUsed: string | undefined;

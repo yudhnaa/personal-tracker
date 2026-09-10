@@ -2,6 +2,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { Trash2 } from "lucide-react";
 import { cn } from "../../lib/cn";
+import { toIsoDate } from "../../lib/date";
 import { useConfirm } from "../../components/confirm-dialog";
 import { IconButton } from "../../components/icon-button";
 import { Modal } from "../../components/modal";
@@ -97,9 +98,21 @@ function TaskDetailDialogContent({
   function patchDate(patch: { startAt?: string; endAt?: string; dueDate?: string; allDay?: boolean }) {
     if (isEvent) {
       const e = event!;
-      const start = patch.startAt ?? e.start;
-      const end = patch.endAt ?? e.end;
+      let start = patch.startAt ?? e.start;
+      let end = patch.endAt ?? e.end;
       const allDay = patch.allDay ?? e.allDay;
+      if (!allDay) {
+        const range = normalizeTimedRange(
+          e.start,
+          e.end,
+          start,
+          end,
+          patch.startAt !== undefined,
+          patch.endAt !== undefined,
+        );
+        start = range.start;
+        end = range.end;
+      }
       onPatchEvent?.({
         start: allDay ? start.slice(0, 10) : start,
         end: allDay ? end.slice(0, 10) : end,
@@ -256,8 +269,9 @@ function TaskDetailDialogContent({
                       : ""
                   }
                   onChange={(e) => {
-                    const iso = e.target.value ? new Date(e.target.value).toISOString() : "";
-                    patchDate({ startAt: iso, dueDate: iso ? iso.slice(0, 10) : "" });
+                    const date = e.target.value ? new Date(e.target.value) : null;
+                    const iso = date ? date.toISOString() : "";
+                    patchDate({ startAt: iso, dueDate: date ? toIsoDate(date) : "" });
                   }}
                   className="w-full flex-1 rounded-[var(--radius-inner)] bg-surface-muted px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:bg-surface-sunken focus:ring-2 focus:ring-accent/40"
                 />
@@ -371,4 +385,33 @@ function TaskDetailDialogContent({
       </div>
     </Modal>
   );
+}
+
+const MIN_EVENT_DURATION_MS = 30 * 60 * 1000;
+
+function normalizeTimedRange(
+  previousStart: string,
+  previousEnd: string,
+  nextStart: string,
+  nextEnd: string,
+  startChanged: boolean,
+  endChanged: boolean,
+) {
+  const startMs = Date.parse(nextStart);
+  const endMs = Date.parse(nextEnd);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs > startMs) {
+    return { start: nextStart, end: nextEnd };
+  }
+
+  const previousDuration = Math.max(
+    MIN_EVENT_DURATION_MS,
+    Date.parse(previousEnd) - Date.parse(previousStart) || MIN_EVENT_DURATION_MS,
+  );
+  if (startChanged && !endChanged) {
+    return { start: nextStart, end: new Date(startMs + previousDuration).toISOString() };
+  }
+  if (endChanged && !startChanged) {
+    return { start: new Date(endMs - previousDuration).toISOString(), end: nextEnd };
+  }
+  return { start: nextStart, end: new Date(startMs + MIN_EVENT_DURATION_MS).toISOString() };
 }
