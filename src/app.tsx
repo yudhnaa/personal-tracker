@@ -14,6 +14,7 @@ import { DashboardGrid } from "./components/dashboard-grid";
 import { SettingsModal } from "./components/settings-modal";
 import { StorageAlert } from "./components/storage-alert";
 import { WelcomeModal } from "./components/welcome-modal";
+import { AccountModal } from "./components/auth/account-modal";
 import { WallpaperAgendaModal } from "./features/wallpaper/wallpaper-agenda-modal";
 import { ApiError, apiJson, ClientSessionChangedError } from "./lib/api-client";
 import { useApiState } from "./lib/use-api-state";
@@ -50,6 +51,7 @@ export function App({
 	const { notes, addNote, patchNote: patchStoredNote, removeNote: removeStoredNote } = useNotes(accountId);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [wallpaperAgendaOpen, setWallpaperAgendaOpen] = useState(false);
+	const [accountOpen, setAccountOpen] = useState(false);
 	const [loggingOut, setLoggingOut] = useState(false);
 	const [logoutError, setLogoutError] = useState("");
 	const [locale, setLocale] = useState<Locale>(initialLocale);
@@ -232,31 +234,58 @@ export function App({
 	}
 
 	return (
-		<div className="min-h-screen p-2">
-			<div className="flex flex-col gap-2 rounded-[2rem] bg-shell p-2 backdrop-blur-sm lg:h-[calc(100dvh-1rem)]">
-				<DashboardHeader
-					title={settings.boardTitle}
-					userEmail={userEmail}
-					locale={locale}
-					onOpenSettings={() => setSettingsOpen(true)}
-					onOpenWallpaperAgenda={() => setWallpaperAgendaOpen(true)}
-					editMode={editMode}
-					onStartEdit={handleStartEdit}
-					onSaveEdit={handleSaveEdit}
-					onCancelEdit={handleCancelEdit}
-					hiddenCards={activeHiddenCards}
-					onRestoreCard={handleRestoreCard}
-					onAddNote={handleAddNote}
-					addNoteLabel={messages[locale].features.notes.addNote}
-					onLogout={logout}
-					loggingOut={loggingOut}
-					logoutError={logoutError}
-				/>
+		<div className="min-h-screen flex flex-col bg-[#F8F9FA] dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased">
+			<DashboardHeader
+				title={settings.boardTitle}
+				userEmail={userEmail}
+				locale={locale}
+				onOpenSettings={() => setSettingsOpen(true)}
+				onOpenWallpaperAgenda={() => setWallpaperAgendaOpen(true)}
+				onOpenAccount={() => setAccountOpen(true)}
+				editMode={editMode}
+				onStartEdit={handleStartEdit}
+				onSaveEdit={handleSaveEdit}
+				onCancelEdit={handleCancelEdit}
+				hiddenCards={activeHiddenCards}
+				onRestoreCard={handleRestoreCard}
+				onAddNote={handleAddNote}
+				addNoteLabel={messages[locale].features.notes.addNote}
+				onLogout={logout}
+				loggingOut={loggingOut}
+				logoutError={logoutError}
+			/>
+
+			<main className="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-5 lg:p-6 flex flex-col gap-4">
+				{editMode && (
+					<div className="bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-2.5 rounded-lg flex items-center justify-between text-xs shadow-xs">
+						<div className="flex items-center gap-2">
+							<span className="font-bold">{messages[locale].dashboard.editLayoutActive}</span>
+							<span className="text-amber-800 dark:text-amber-300 hidden sm:inline">{messages[locale].dashboard.editLayoutHint}</span>
+						</div>
+						<div className="flex items-center gap-2">
+							<button
+								type="button"
+								onClick={handleCancelEdit}
+								className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-medium rounded hover:bg-amber-50 dark:hover:bg-slate-700 transition-colors"
+							>
+								{messages[locale].dashboard.cancelLayout}
+							</button>
+							<button
+								type="button"
+								onClick={handleSaveEdit}
+								className="px-3 py-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold rounded hover:bg-slate-800 dark:hover:bg-white transition-colors shadow-xs"
+							>
+								{messages[locale].dashboard.saveLayout}
+							</button>
+						</div>
+					</div>
+				)}
+
 				<motion.div
 					initial={reduceMotion ? false : { opacity: 0, y: 14 }}
 					animate={{ opacity: 1, y: 0 }}
-					transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
-					className={isDesktop ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "w-full"}
+					transition={reduceMotion ? { duration: 0 } : { duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+					className="w-full flex-1"
 				>
 					<DashboardGrid
 						activeLayout={activeLayout}
@@ -271,7 +300,7 @@ export function App({
 						})}
 					</DashboardGrid>
 				</motion.div>
-			</div>
+			</main>
 
 			<SettingsModal
 				open={settingsOpen}
@@ -282,6 +311,13 @@ export function App({
 				saveError={settingsSaveError}
 				onClose={() => setSettingsOpen(false)}
 				onUpdate={update}
+			/>
+
+			<AccountModal
+				open={accountOpen}
+				email={userEmail}
+				locale={locale}
+				onClose={() => setAccountOpen(false)}
 			/>
 
 			<WallpaperAgendaModal

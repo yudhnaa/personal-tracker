@@ -1,14 +1,11 @@
 import { Bookmark as BookmarkIcon, Plus, Settings2, X } from "lucide-react";
-import Image from "next/image";
 import { useState } from "react";
 import { BentoCard } from "../../components/bento-card";
 import { useConfirm } from "../../components/confirm-dialog";
-import { IconButton } from "../../components/icon-button";
-import { Tooltip } from "../../components/ui/tooltip";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
 import { cn } from "../../lib/cn";
-import { faviconUrl, hostname } from "../../lib/url";
+import { hostname } from "../../lib/url";
 import { BookmarkDialog } from "./bookmark-dialog";
 import { GroupManagerDialog } from "./group-manager-dialog";
 import { useBookmarks } from "./use-bookmarks";
@@ -64,28 +61,30 @@ export function BookmarkCard({
       editMode={editMode}
       onHide={onHide}
       action={
-        <>
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setDialogOpen(true)}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-btn pl-3 pr-3.5 text-[13px] font-semibold text-btn-ink transition-colors hover:opacity-90"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-md transition-colors"
           >
-            <Plus size={16} />
-            {t.addBookmark}
+            <Plus size={13} className="text-slate-500 dark:text-slate-400" />
+            <span>{t.addBookmark}</span>
           </button>
-          <IconButton
+          <button
+            type="button"
             aria-label={t.manageGroups}
             title={t.manageGroups}
             onClick={() => setGroupMgrOpen(true)}
+            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-md transition-colors"
           >
-            <Settings2 size={18} />
-          </IconButton>
-        </>
+            <Settings2 size={13} />
+          </button>
+        </div>
       }
     >
       <div className="flex h-full flex-col">
         {groups.length > 0 ? (
-          <div className="mb-3 flex gap-1.5 overflow-x-auto">
+          <div className="mb-2.5 flex gap-1.5 overflow-x-auto pb-1">
             <FilterChip active={!filter} onClick={() => setFilter("")}>
               {t.all}
             </FilterChip>
@@ -101,59 +100,46 @@ export function BookmarkCard({
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-0.5 custom-scrollbar">
           {visible.length === 0 ? (
-            <p className="grid flex-1 place-items-center text-sm text-ink-faint">
+            <p className="grid flex-1 place-items-center text-xs text-slate-400 dark:text-slate-500">
               {t.empty}
             </p>
           ) : (
             visible.map((b) => (
               <div
                 key={b.id}
-                className="group flex items-center gap-3 rounded-[var(--radius-inner)] p-2 transition-colors hover:bg-surface-sunken"
+                className="group flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 transition-colors"
               >
                 <a
                   href={b.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-w-0 flex-1 items-center gap-3"
+                  className="flex items-center gap-2 min-w-0 flex-1"
                 >
-                  <Image
-                    src={faviconUrl(b.url)}
-                    alt=""
-                    width={20}
-                    height={20}
-                    loader={({ src }) => src}
-                    unoptimized
-                    className="h-5 w-5 shrink-0 rounded"
-                    onError={(e) => {
-                      e.currentTarget.style.visibility = "hidden";
-                    }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-ink">
-                      {b.title}
-                    </span>
-                    <span className="block truncate text-xs text-ink-faint">
-                      {hostname(b.url)}
-                    </span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 shrink-0" />
+                  <span className="truncate font-medium text-slate-800 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
+                    {b.title}
                   </span>
                   {b.group ? (
-                    <span className="shrink-0 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-ink-soft">
+                    <span className="shrink-0 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded">
                       {b.group}
                     </span>
                   ) : null}
                 </a>
-                <Tooltip label={t.deleteBookmark}>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                    {hostname(b.url)}
+                  </span>
                   <button
                     type="button"
                     aria-label={t.deleteBookmark}
                     onClick={() => removeBookmark(b.id)}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-faint opacity-0 transition hover:bg-surface-hover hover:text-ink group-hover:opacity-100"
+                    className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-rose-600 dark:hover:text-rose-400 transition-opacity p-0.5"
                   >
-                    <X size={15} />
+                    <X size={13} />
                   </button>
-                </Tooltip>
+                </div>
               </div>
             ))
           )}
@@ -193,10 +179,10 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+        "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium border transition-colors",
         active
-          ? "bg-accent-strong text-white"
-          : "bg-surface-muted text-ink-soft hover:bg-surface-hover",
+          ? "bg-[#0f172a] dark:bg-slate-100 text-white dark:text-slate-900 border-transparent shadow-2xs font-semibold"
+          : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700",
       )}
     >
       {children}

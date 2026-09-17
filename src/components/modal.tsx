@@ -97,12 +97,12 @@ export function Modal({
 		<AnimatePresence>
 			{open ? (
 				<motion.div
-					className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+					className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 dark:bg-black/60 p-4"
 					onMouseDown={onClose}
 					initial={reduceMotion ? false : { opacity: 0 }}
 					animate={{ opacity: 1 }}
 					exit={{ opacity: 0 }}
-					transition={{ duration: reduceMotion ? 0 : 0.18 }}
+					transition={{ duration: reduceMotion ? 0 : 0.15 }}
 				>
 					<motion.div
 						ref={dialogRef}
@@ -111,31 +111,32 @@ export function Modal({
 						aria-label={typeof title === "string" ? title : t.fallbackTitle}
 						tabIndex={-1}
 						className={cn(
-							"max-h-[calc(100dvh-2rem)] w-full overflow-y-auto rounded-[var(--radius-card)] bg-surface p-6 outline-none",
+							"max-h-[calc(100dvh-2rem)] w-full overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-lg outline-none",
 							wide ? "max-w-3xl" : "max-w-xl",
 						)}
 						onMouseDown={(e) => e.stopPropagation()}
-						initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 10 }}
+						initial={reduceMotion ? false : { opacity: 0, scale: 0.98, y: 6 }}
 						animate={{ opacity: 1, scale: 1, y: 0 }}
-						exit={{ opacity: 0, scale: 0.96, y: 10 }}
-						transition={reduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+						exit={{ opacity: 0, scale: 0.98, y: 6 }}
+						transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
 					>
-						<div className="mb-5 flex items-center justify-between gap-3">
+						<div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
 							{typeof title === "string" ? (
-								<h3 className="text-lg font-semibold tracking-tight text-ink">
+								<h3 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
 									{title}
 								</h3>
 							) : (
 								<div className="min-w-0 flex-1">{title}</div>
 							)}
-							<div className="flex shrink-0 items-center gap-1.5">
+							<div className="flex shrink-0 items-center gap-1">
 								{headerAction}
 								<IconButton
 									aria-label={t.close}
 									title={t.close}
 									onClick={onClose}
+									className="h-7 w-7 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
 								>
-									<X size={18} />
+									<X size={15} />
 								</IconButton>
 							</div>
 						</div>

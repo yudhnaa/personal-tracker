@@ -98,3 +98,31 @@ export function last7Days(
     return { iso, done: set.has(iso), isToday: iso === today };
   });
 }
+
+/** Current calendar week (Monday to Sunday) with configurable weekday labels */
+export function currentWeekDays(
+  done: string[],
+  labels?: string[],
+): Array<{ letter: string; iso: string; done: boolean; isToday: boolean }> {
+  const set = new Set(done);
+  const now = new Date();
+  const day = now.getDay(); // 0 is Sunday, 1 is Monday...
+  const diffToMonday = (day + 6) % 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diffToMonday);
+
+  const letters = labels ?? ["M", "T", "W", "T", "F", "S", "S"];
+  const today = todayIso();
+
+  return letters.map((letter, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const iso = toIsoDate(d);
+    return {
+      letter,
+      iso,
+      done: set.has(iso),
+      isToday: iso === today,
+    };
+  });
+}

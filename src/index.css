@@ -5,39 +5,41 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-  Semantic design tokens for the Minimalism Bento Grid dashboard.
-  Surfaces + text flip between light/dark; a single configurable accent
-  (primary colour) drives every highlight. No shadows.
+  Design System: Personal Tracker
+  Precision Minimalist Productivity Workspace tokens.
+  Inter + JetBrains Mono, 8px cards, 6px buttons, 1px solid #e2e8f0 borders.
 */
 @theme {
-    --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
     --color-surface: #ffffff; /* cards */
-    --color-surface-muted: #f4f4f5; /* chips, icon wells */
-    --color-surface-sunken: #fafafa; /* inputs, calendar cells */
-    --color-surface-hover: #e4e4e7; /* hovered muted surfaces */
-    --color-shell: rgba(255, 255, 255, 0.62); /* translucent container */
-    --color-line: rgba(228, 228, 231, 0.7);
+    --color-surface-muted: #f8fafc; /* kanban column track & secondary surfaces */
+    --color-surface-sunken: #f8fafc; /* inputs, calendar cells */
+    --color-surface-hover: #f1f5f9; /* hovered surfaces */
+    --color-shell: #ffffff;
+    --color-line: #e2e8f0; /* hairline crisp border */
 
-    --color-ink: #18181b;
-    --color-ink-soft: #52525b;
-    --color-ink-faint: #a1a1aa;
+    --color-ink: #0f172a; /* deep charcoal slate */
+    --color-ink-soft: #64748b; /* medium gray slate */
+    --color-ink-faint: #94a3b8; /* light gray slate */
 
-    /* High-contrast solid buttons / active pills. */
-    --color-btn: #18181b;
+    /* High-contrast solid buttons */
+    --color-btn: #0f172a;
     --color-btn-ink: #ffffff;
 
-    /* Accent — only --color-accent changes per primary colour; the rest derive. */
-    --color-accent: #f43f5e;
-    --color-accent-soft: color-mix(in srgb, var(--color-accent) 16%, #ffffff);
-    --color-accent-ink: color-mix(in srgb, var(--color-accent) 78%, #000000);
-    /* Deepened accent for solid fills + white text; recomputed at runtime. */
-    --color-accent-strong: color-mix(in srgb, var(--color-accent) 78%, #000000);
+    /* Primary Emerald Accent */
+    --color-accent: #15803d;
+    --color-accent-soft: #dcfce7;
+    --color-accent-ink: #14532d;
+    --color-accent-strong: #166534;
 
-    /* Consistent rounding scale: outer container wraps slightly smaller cards. */
-    --radius-card: 1.75rem;
-    --radius-inner: 1rem;
-    --radius-pill: 999px;
+    /* Personal Tracker geometric rounding scale */
+    --radius-card: 8px;
+    --radius-btn: 6px;
+    --radius-inner: 6px;
+    --radius-tag: 4px;
+    --radius-pill: 9999px;
 
     /* Enter/exit animations for Radix popovers, selects, dropdowns. */
     --animate-pop-in: pop-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -109,22 +111,24 @@
 }
 
 .dark {
-    --color-surface: #1c1c1f;
-    --color-surface-muted: #27272a;
-    --color-surface-sunken: #232327;
-    --color-surface-hover: #3f3f46;
-    --color-shell: rgba(18, 18, 21, 0.6);
-    --color-line: rgba(63, 63, 70, 0.6);
+    --color-surface: #0f172a;
+    --color-surface-muted: #1e293b;
+    --color-surface-sunken: #020617;
+    --color-surface-hover: #334155;
+    --color-shell: #0f172a;
+    --color-line: #334155;
 
-    --color-ink: #fafafa;
-    --color-ink-soft: #a1a1aa;
-    --color-ink-faint: #71717a;
+    --color-ink: #f8fafc;
+    --color-ink-soft: #94a3b8;
+    --color-ink-faint: #64748b;
 
-    --color-btn: #fafafa;
-    --color-btn-ink: #18181b;
+    --color-btn: #f8fafc;
+    --color-btn-ink: #0f172a;
 
-    --color-accent-soft: color-mix(in srgb, var(--color-accent) 26%, #000000);
-    --color-accent-ink: color-mix(in srgb, var(--color-accent) 64%, #ffffff);
+    --color-accent: #22c55e;
+    --color-accent-soft: #052e16;
+    --color-accent-ink: #86efac;
+    --color-accent-strong: #16a34a;
 }
 
 @layer base {
@@ -143,13 +147,18 @@
         font-family: var(--font-sans);
         color: var(--color-ink);
         -webkit-font-smoothing: antialiased;
-        /* The saved image is restored before hydration; first-time visitors
-           receive a neutral backdrop until their settings load. */
-        background-color: #6b5566;
-        background-image: var(--initial-dashboard-background, none);
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        background-color: #f8f9fa;
+    }
+
+    .dark body {
+        background-color: #020617;
+    }
+
+    /* Tabular numeric alignment */
+    .tabular-nums {
+        font-variant-numeric: tabular-nums;
     }
 
     /* Every interactive element shows the pointer cursor. */
@@ -168,24 +177,23 @@
         cursor: not-allowed;
     }
 
-    /* Hide every scrollbar but keep scrolling fully functional. */
-    /* Thin, subtle scrollbars — visible enough to hint scrollable content. */
+    /* Crisp thin scrollbar */
     * {
-        scrollbar-width: thin; /* Firefox */
-        scrollbar-color: rgba(113, 113, 122, 0.4) transparent;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
     }
     ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: rgba(113, 113, 122, 0.4);
-        border-radius: 999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: rgba(113, 113, 122, 0.6);
+        width: 5px;
+        height: 5px;
     }
     ::-webkit-scrollbar-track {
         background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
     }
 }

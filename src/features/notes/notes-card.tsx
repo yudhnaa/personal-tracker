@@ -75,19 +75,19 @@ export function NotesCard({
       editMode={editMode}
       onHide={onHide}
       action={
-        <>
-          <span className="text-xs font-medium text-ink-faint">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] font-medium text-slate-400 tabular-nums">
             {t.wordCount(words)}
           </span>
           <IconButton
             aria-label={t.deleteTooltip}
             title={t.deleteTooltip}
             onClick={handleDelete}
-            className="bg-transparent text-ink-faint hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15"
+            className="h-6 w-6 rounded bg-transparent text-slate-400 hover:bg-red-50 hover:text-red-600"
           >
-            <Trash2 size={16} />
+            <Trash2 size={13} />
           </IconButton>
-        </>
+        </div>
       }
     >
       <div className="flex h-full min-h-0 flex-col gap-2">
@@ -104,7 +104,7 @@ export function NotesCard({
             }
           }}
           aria-label={t.titleLabel}
-          className="h-9 shrink-0 rounded-[var(--radius-inner)] bg-surface-sunken px-3 text-sm font-semibold text-ink outline-none transition-colors placeholder:text-ink-faint focus:ring-2 focus:ring-accent/30"
+          className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-400/20"
         />
         <textarea
           maxLength={50_000}
@@ -113,7 +113,7 @@ export function NotesCard({
           value={text}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t.placeholder}
-          className="min-h-0 flex-1 resize-none rounded-[var(--radius-inner)] bg-surface-sunken p-3.5 text-sm leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-surface-sunken focus:ring-2 focus:ring-accent/30"
+          className="min-h-0 flex-1 resize-none rounded-md border border-slate-200 bg-white p-3 text-xs leading-[24px] text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-400/20"
         />
       </div>
     </BentoCard>
