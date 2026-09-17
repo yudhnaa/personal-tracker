@@ -22,7 +22,7 @@ export function AuthenticatedAccountPage({ initialLocale }: { initialLocale: Loc
           <button
             type="button"
             onClick={() => void account.refetch()}
-            className="rounded-full bg-btn px-4 py-2 font-semibold text-btn-ink"
+            className="rounded-md bg-[#15803D] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#166534] shadow-xs"
           >
             {initialLocale === "vi" ? "Thử lại" : "Try again"}
           </button>

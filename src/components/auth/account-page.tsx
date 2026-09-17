@@ -46,44 +46,56 @@ export function AccountPage({
 
 	return (
 		<AuthShell locale={initialLocale} authenticated>
-			<section className="w-full max-w-md rounded-[var(--radius-card)] bg-surface-sunken p-6">
-				<h1 className="text-2xl font-semibold">{t.profile}</h1>
-				<p className="mt-2 text-sm text-ink-soft">{email}</p>
+			<section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xs">
+				<div className="border-b border-slate-100 pb-4">
+					<h1 className="text-lg font-semibold tracking-tight text-slate-900">
+						{t.profile}
+					</h1>
+					<p className="mt-1 font-mono text-xs text-slate-500">{email}</p>
+				</div>
 				<form
 					onSubmit={changePassword}
-					className="mt-6 space-y-4"
+					className="mt-5 space-y-4"
 				>
-					<label className="block text-sm font-semibold">
-						{t.currentPassword}
+					<div>
+						<label className="mb-1.5 block text-xs font-medium text-slate-700">
+							{t.currentPassword}
+						</label>
 						<input
-							className="mt-2 w-full rounded-[var(--radius-inner)] bg-surface px-3 py-2 outline-none ring-1 ring-line focus:ring-accent"
-								type="password"
-								name="current-password"
-								autoComplete="current-password"
+							className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-400/20"
+							type="password"
+							name="current-password"
+							autoComplete="current-password"
 							value={currentPassword}
 							onChange={(event) => setCurrentPassword(event.target.value)}
 							required
 						/>
-					</label>
-					<label className="block text-sm font-semibold">
-						{t.newPassword}
+					</div>
+					<div>
+						<label className="mb-1.5 block text-xs font-medium text-slate-700">
+							{t.newPassword}
+						</label>
 						<input
-							className="mt-2 w-full rounded-[var(--radius-inner)] bg-surface px-3 py-2 outline-none ring-1 ring-line focus:ring-accent"
-								type="password"
-								name="new-password"
-								autoComplete="new-password"
+							className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-400/20"
+							type="password"
+							name="new-password"
+							autoComplete="new-password"
 							value={newPassword}
 							onChange={(event) => setNewPassword(event.target.value)}
 							required
 							minLength={12}
 						/>
-					</label>
-						<button type="submit" disabled={changingPassword} className="w-full rounded-full bg-btn px-4 py-3 text-sm font-semibold text-btn-ink disabled:cursor-not-allowed disabled:opacity-60">
-						{t.changePassword}
+					</div>
+					<button
+						type="submit"
+						disabled={changingPassword}
+						className="flex h-9 w-full items-center justify-center rounded-md bg-[#15803D] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-50 shadow-xs"
+					>
+						{changingPassword ? "..." : t.changePassword}
 					</button>
 				</form>
 				{message ? (
-						<p aria-live="polite" className="mt-4 rounded-[var(--radius-inner)] bg-surface p-3 text-sm text-ink-soft">
+					<p aria-live="polite" className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
 						{message}
 					</p>
 				) : null}

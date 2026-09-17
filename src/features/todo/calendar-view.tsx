@@ -24,6 +24,7 @@ type CalendarViewProps = {
 	onOpenEvent: (event: GoogleCalendarEvent) => void;
 	onCreateOn: (dateIso: string) => void;
 	onConvertEvent?: (event: GoogleCalendarEvent) => void | Promise<void>;
+	onToggleTaskStatus?: (taskId: string, done: boolean) => void;
 };
 
 export function CalendarView({
@@ -33,6 +34,7 @@ export function CalendarView({
 	onOpenEvent,
 	onCreateOn,
 	onConvertEvent,
+	onToggleTaskStatus,
 }: CalendarViewProps) {
 	const [cursor, setCursor] = useState(() => {
 		const d = new Date();
@@ -172,14 +174,51 @@ export function CalendarView({
 	const googleConnected =
 		googleCalendar.connection.connected;
 
+	const [dayFilter, setDayFilter] = useState<"all" | "event" | "task">("all");
+	const [bannerMessage, setBannerMessage] = useState<string | null>(null);
+
+	function showToast(msg: string) {
+		setBannerMessage(msg);
+		window.setTimeout(() => {
+			setBannerMessage((prev) => (prev === msg ? null : prev));
+		}, 3500);
+	}
+
+	function shiftDay(deltaDays: number) {
+		if (!dayView) return;
+		const d = new Date(dayView + "T00:00:00");
+		d.setDate(d.getDate() + deltaDays);
+		setDayView(toIsoDate(d));
+	}
+
+	const allDayItems = dayItemsInView;
+	const filteredDayItems = useMemo(() => {
+		if (dayFilter === "all") return allDayItems;
+		return allDayItems.filter((i) => i.kind === dayFilter);
+	}, [allDayItems, dayFilter]);
+
+	const countAll = allDayItems.length;
+	const countEvents = dayEventsInView.length;
+	const countTasks = allDayItems.filter((i) => i.kind === "task").length;
+
 	async function convertAllDayEvents() {
-		if (!dayView || !onConvertEvent || dayEventsInView.length === 0 || convertingDay) return;
+		if (!dayView || !onConvertEvent || dayEventsInView.length === 0 || convertingDay) {
+			showToast(t.calendar.noEventsToConvert);
+			return;
+		}
 		setConvertingDay(dayView);
 		try {
 			await Promise.all(dayEventsInView.map((event) => onConvertEvent(event)));
+			showToast(t.calendar.allEventsConverted);
 		} finally {
 			setConvertingDay(null);
 		}
+	}
+
+	async function handleConvertSingle(event: GoogleCalendarEvent) {
+		if (!onConvertEvent) return;
+		await onConvertEvent(event);
+		showToast(t.calendar.convertedEventSuccess(event.title || "Event"));
 	}
 
 	return (
@@ -237,7 +276,11 @@ export function CalendarView({
 							<button
 								type="button"
 								key={cell.iso}
-								onClick={() => setDayView(cell.iso)}
+								onClick={() => {
+									setDayFilter("all");
+									setBannerMessage(null);
+									setDayView(cell.iso);
+								}}
 								className={cn(
 									"flex min-h-0 flex-col gap-1 overflow-hidden rounded-[0.85rem] p-1.5 text-left transition-colors",
 									cell.inMonth
@@ -314,21 +357,101 @@ export function CalendarView({
 			<Modal
 				open={dayView !== null}
 				title={
-					<div className="flex min-w-0 items-center gap-2">
-						<h3 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">
-							{dayView ? formatFullDate(dayView, locale) : ""}
-						</h3>
-						{onConvertEvent && dayEventsInView.length > 0 ? (
-							<button
-								type="button"
-								onClick={() => void convertAllDayEvents()}
-								disabled={convertingDay === dayView}
-								className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink disabled:cursor-wait disabled:opacity-60"
-							>
-								<ListChecks size={14} />
-								{t.calendar.convertAllEventsToTasks}
-							</button>
-						) : null}
+					<div className="flex flex-col gap-3">
+						<div className="flex flex-wrap items-center gap-2.5">
+							<h3 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+								{dayView ? formatFullDate(dayView, locale) : ""}
+							</h3>
+							{onConvertEvent && dayEventsInView.length > 0 ? (
+								<button
+									type="button"
+									onClick={() => void convertAllDayEvents()}
+									disabled={convertingDay === dayView}
+									className="group inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 disabled:cursor-wait disabled:opacity-60"
+									title={t.calendar.convertAllEventsToTasks}
+								>
+									<ListChecks size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-white transition-colors" />
+									<span>{t.calendar.convertAllEventsToTasks}</span>
+								</button>
+							) : null}
+						</div>
+						{/* Sub-filter bar & Date navigation controls */}
+						<div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2.5 text-xs">
+							{/* Filter Tabs */}
+							<div className="flex items-center gap-1.5" role="tablist">
+								<button
+									type="button"
+									onClick={() => setDayFilter("all")}
+									className={cn(
+										"px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+										dayFilter === "all"
+											? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold"
+											: "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
+									)}
+								>
+									{t.calendar.filterAll}{" "}
+									<span className={dayFilter === "all" ? "opacity-80 font-normal ml-0.5" : "text-slate-400 dark:text-slate-500 ml-0.5"}>
+										({countAll})
+									</span>
+								</button>
+								<button
+									type="button"
+									onClick={() => setDayFilter("event")}
+									className={cn(
+										"px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+										dayFilter === "event"
+											? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold"
+											: "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
+									)}
+								>
+									{t.calendar.filterEvents}{" "}
+									<span className={dayFilter === "event" ? "opacity-80 font-normal ml-0.5" : "text-slate-400 dark:text-slate-500 ml-0.5"}>
+										({countEvents})
+									</span>
+								</button>
+								<button
+									type="button"
+									onClick={() => setDayFilter("task")}
+									className={cn(
+										"px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+										dayFilter === "task"
+											? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold"
+											: "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
+									)}
+								>
+									{t.calendar.filterTasks}{" "}
+									<span className={dayFilter === "task" ? "opacity-80 font-normal ml-0.5" : "text-slate-400 dark:text-slate-500 ml-0.5"}>
+										({countTasks})
+									</span>
+								</button>
+							</div>
+							{/* Mini Date Navigator */}
+							<div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium">
+								<button
+									type="button"
+									onClick={() => shiftDay(-1)}
+									className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors p-0.5"
+									title={t.calendar.prevDay}
+								>
+									<ChevronLeft size={15} />
+								</button>
+								<button
+									type="button"
+									onClick={() => setDayView(today)}
+									className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-0.5 rounded transition-colors"
+								>
+									{t.calendar.today}
+								</button>
+								<button
+									type="button"
+									onClick={() => shiftDay(1)}
+									className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors p-0.5"
+									title={t.calendar.nextDay}
+								>
+									<ChevronRight size={15} />
+								</button>
+							</div>
+						</div>
 					</div>
 				}
 				headerAction={
@@ -339,106 +462,138 @@ export function CalendarView({
 							if (dayView) onCreateOn(dayView);
 							setDayView(null);
 						}}
-						className="bg-btn text-btn-ink hover:opacity-90"
+						className="h-8 w-8 rounded-full bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 active:scale-95 shadow-xs"
 					>
-						<Plus size={17} />
+						<Plus size={16} />
 					</IconButton>
 				}
 				onClose={() => setDayView(null)}
 			>
 				<div className="space-y-3">
-					{dayItemsInView.length > 0 ? (
-						<div className="space-y-1.5">
-							{dayItemsInView.map((item) =>
+					{/* Toast banner */}
+					{bannerMessage ? (
+						<div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3.5 py-2 text-xs font-medium text-emerald-800 dark:text-emerald-300 transition-all">
+							<span>{bannerMessage}</span>
+							<button
+								type="button"
+								onClick={() => setBannerMessage(null)}
+								className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-200 ml-2"
+							>
+								×
+							</button>
+						</div>
+					) : null}
+
+					{filteredDayItems.length > 0 ? (
+						<div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+							{filteredDayItems.map((item) =>
 								item.kind === "task" ? (
-									<button
+									<article
 										key={`task-${item.task.id}`}
-										type="button"
-										onClick={() => {
-											onOpenTask(item.task);
-											setDayView(null);
-										}}
-										className="flex w-full items-start gap-3 rounded-[var(--radius-inner)] bg-surface-sunken px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
+										className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/80 p-3.5 transition-all duration-150 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs"
 									>
-										<div className="min-w-0 flex-1">
-											<div className="flex items-center gap-2">
-												<p className="truncate text-sm font-medium text-ink">
+										<div className="flex items-center gap-3 min-w-0 flex-1">
+											<label
+												className="cursor-pointer flex items-center shrink-0"
+												onClick={(e) => e.stopPropagation()}
+											>
+												<input
+													type="checkbox"
+													checked={item.task.status === "done"}
+													onChange={(e) => {
+														e.stopPropagation();
+														if (onToggleTaskStatus) {
+															onToggleTaskStatus(item.task.id, e.target.checked);
+														}
+													}}
+													className="w-4 h-4 rounded text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus:ring-slate-900 transition cursor-pointer"
+												/>
+											</label>
+											<div
+												className="min-w-0 flex-1 cursor-pointer"
+												onClick={() => {
+													onOpenTask(item.task);
+													setDayView(null);
+												}}
+											>
+												<span
+													className={cn(
+														"font-medium text-sm text-slate-800 dark:text-slate-200 block truncate transition-colors",
+														item.task.status === "done" && "line-through text-slate-400 dark:text-slate-500",
+													)}
+												>
 													{item.task.title}
-												</p>
-												{item.task.source === "google" ? (
-													<CalendarClock
-														size={13}
-														className="shrink-0 text-ink-faint"
-													/>
+												</span>
+												{item.task.description ? (
+													<span className="text-[11px] text-slate-400 dark:text-slate-500 block truncate mt-0.5">
+														{item.task.description}
+													</span>
 												) : null}
 											</div>
-											{item.task.description ? (
-												<p className="mt-0.5 truncate text-xs text-ink-faint">
-													{item.task.description}
-												</p>
-											) : null}
 										</div>
 										<span
 											className={cn(
-												"mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+												"inline-flex shrink-0 items-center px-3 py-0.5 rounded-full text-xs font-medium border",
 												STATUS_META[item.task.status].chip,
 											)}
 										>
 											{t.columns[item.task.status]}
 										</span>
-									</button>
+									</article>
 								) : (
-									<div
+									<article
 										key={`event-${item.event.connectionId}-${item.event.calendarId}-${item.event.id}`}
-										className="group flex w-full items-start gap-3 rounded-[var(--radius-inner)] bg-violet-50 px-3 py-2.5 text-left transition-colors hover:bg-violet-100 dark:bg-violet-500/15 dark:hover:bg-violet-500/20"
+										className="group relative rounded-xl border border-[#ede9fe] dark:border-violet-900/40 bg-[#f5f3ff] dark:bg-violet-950/20 p-3.5 transition-all duration-150 hover:border-[#ddd6fe] dark:hover:border-violet-800/50 hover:shadow-xs"
 									>
-										<button
-											type="button"
-											onClick={() => {
-												onOpenEvent(item.event);
-												setDayView(null);
-											}}
-											className="flex min-w-0 flex-1 items-start gap-3 text-left"
-										>
-											<CalendarClock
-												size={16}
-												className="mt-0.5 shrink-0 text-violet-600 dark:text-violet-200"
-											/>
-											<div className="min-w-0 flex-1">
-												<p className="truncate text-sm font-medium text-ink">
-													{item.event.title}
-												</p>
-												<p className="mt-0.5 truncate text-xs text-violet-700 dark:text-violet-200">
-													{formatEventTimeRange(item.event, locale)}
-													{item.event.location ? ` - ${item.event.location}` : ""}
-												</p>
+										<div className="flex items-center justify-between gap-3">
+											{/* Left: Icon, Title, and Time */}
+											<div
+												className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer"
+												onClick={() => {
+													onOpenEvent(item.event);
+													setDayView(null);
+												}}
+											>
+												<div className="mt-0.5 text-violet-600 dark:text-violet-400 shrink-0">
+													<CalendarClock size={20} />
+												</div>
+												<div className="min-w-0 flex-1">
+													<h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100 leading-tight truncate">
+														{item.event.title}
+													</h4>
+													<p className="text-xs font-semibold text-violet-600 dark:text-violet-400 mt-1 truncate">
+														{formatEventTimeRange(item.event, locale)}
+														{item.event.location ? ` • ${item.event.location}` : ""}
+													</p>
+												</div>
 											</div>
-										</button>
-										<div className="flex shrink-0 flex-col items-end gap-1.5">
-											<span className="mt-0.5 rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-white/10 dark:text-violet-200">
-												{t.calendar.googleEvent}
-											</span>
-											{onConvertEvent && (
-												<button
-													type="button"
-													onClick={(e) => {
-														e.stopPropagation();
-														onConvertEvent(item.event);
-														setDayView(null);
-													}}
-													className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 opacity-0 transition-all hover:bg-violet-200/50 group-hover:opacity-100 dark:text-violet-300 dark:hover:bg-violet-400/30"
-												>
-													<ListChecks size={12} />
-													{t.calendar.convertToTask}
-												</button>
-											)}
+											{/* Right: Google badge & Convert to task action */}
+											<div className="flex flex-col items-end gap-1.5 shrink-0">
+												<span className="inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium text-violet-700 dark:text-violet-300 bg-white/95 dark:bg-violet-900/40 border border-violet-200/90 dark:border-violet-800/50 shadow-2xs">
+													{t.calendar.googleEvent}
+												</span>
+												{onConvertEvent ? (
+													<button
+														type="button"
+														onClick={(e) => {
+															e.stopPropagation();
+															void handleConvertSingle(item.event);
+														}}
+														className="text-[12px] font-medium text-violet-600/90 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 flex items-center gap-1 transition-colors hover:underline pt-0.5 active:scale-95"
+														title={t.calendar.convertToTask}
+													>
+														<ListChecks size={13} className="text-violet-500 dark:text-violet-400" />
+														<span>{t.calendar.convertToTask}</span>
+													</button>
+												) : null}
+											</div>
 										</div>
-									</div>
+									</article>
 								),
 							)}
 						</div>
 					) : (
-						<p className="py-2 text-center text-sm text-ink-faint">
+						<p className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
 							{t.calendar.empty}
 						</p>
 					)}

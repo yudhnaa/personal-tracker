@@ -39,8 +39,8 @@ export const STATUS_META: Record<
   TaskStatus,
   { dot: string; chip: string }
 > = {
-  backlog: { dot: "bg-zinc-400", chip: "bg-surface-muted text-ink-soft" },
-  todo: { dot: "bg-sky-500", chip: "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300" },
-  doing: { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  done: { dot: "bg-accent", chip: "bg-accent-soft text-accent-ink" },
+  backlog: { dot: "bg-slate-400", chip: "bg-slate-100 text-slate-600" },
+  todo: { dot: "bg-sky-500", chip: "bg-sky-50 text-sky-700 border border-sky-100" },
+  doing: { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 border border-amber-100" },
+  done: { dot: "bg-emerald-600", chip: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
 };

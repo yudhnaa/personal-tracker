@@ -94,34 +94,44 @@ export function TodoCard({ className, googleCalendar, editMode, onHide }: TodoCa
       editMode={editMode}
       onHide={onHide}
       action={
-        <>
-          <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1">
-            <ViewTab
-              active={activeView === "board"}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-md border border-slate-200 dark:border-slate-700 text-xs">
+            <button
+              type="button"
               onClick={() => setView("board")}
-              label={t.viewBoard}
+              className={cn(
+                "px-2.5 py-1 rounded-[4px] font-semibold flex items-center gap-1.5 transition-all text-xs",
+                activeView === "board"
+                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              )}
             >
-              <KanbanSquare size={15} />
+              <KanbanSquare size={13} />
               <span className="hidden sm:inline">{t.viewBoard}</span>
-            </ViewTab>
-            <ViewTab
-              active={activeView === "calendar"}
+            </button>
+            <button
+              type="button"
               onClick={() => setView("calendar")}
-              label={t.viewCalendar}
+              className={cn(
+                "px-2.5 py-1 rounded-[4px] font-medium flex items-center gap-1.5 transition-all text-xs",
+                activeView === "calendar"
+                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs font-semibold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              )}
             >
-              <Calendar size={15} />
+              <Calendar size={13} />
               <span className="hidden sm:inline">{t.viewCalendar}</span>
-            </ViewTab>
+            </button>
           </div>
           <button
             type="button"
             onClick={() => openNew()}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-btn pl-3 pr-3.5 text-[13px] font-semibold text-btn-ink transition-colors hover:opacity-90"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0f172a] dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 rounded-md text-xs font-semibold shadow-xs transition-colors"
           >
-            <Plus size={16} />
-            {t.addTask}
+            <Plus size={14} />
+            <span className="hidden sm:inline">{t.addTask}</span>
           </button>
-        </>
+        </div>
       }
     >
       {activeView === "board" ? (
@@ -139,6 +149,7 @@ export function TodoCard({ className, googleCalendar, editMode, onHide }: TodoCa
           onOpenEvent={(event) => setDetailEvent(event)}
           onCreateOn={(date) => openNew({ dueDate: date })}
           onConvertEvent={convertEventToTask}
+          onToggleTaskStatus={(taskId, done) => patchTask(taskId, { status: done ? "done" : "todo" })}
         />
       )}
 
@@ -194,30 +205,3 @@ const BLANK = {
   status: "todo" as const,
   createdAt: 0,
 };
-
-function ViewTab({
-  active,
-  onClick,
-  label,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className={cn(
-        "flex h-7 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors",
-        active ? "bg-surface text-ink" : "text-ink-soft hover:text-ink",
-      )}
-    >
-      {children}
-    </button>
-  );
-}

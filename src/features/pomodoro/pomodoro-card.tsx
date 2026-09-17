@@ -22,9 +22,6 @@ export function PomodoroCard({
   const locale = useLocale();
   const t = messages[locale].features.pomodoro;
 
-  const radius = 56;
-  const circ = 2 * Math.PI * radius;
-
   return (
     <BentoCard
       icon={Timer}
@@ -34,7 +31,7 @@ export function PomodoroCard({
       editMode={editMode}
       onHide={onHide}
       action={
-        <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1">
+        <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300">
           {p.presets.map((preset) => (
             <button
               key={preset.id}
@@ -42,10 +39,10 @@ export function PomodoroCard({
               title={t.presetTooltip(preset.focus, preset.break)}
               onClick={() => p.selectPreset(preset)}
               className={cn(
-                "h-7 whitespace-nowrap rounded-full px-2.5 text-[11px] font-medium transition-colors",
+                "px-2 py-0.5 rounded-[4px] transition-all text-[11px]",
                 p.preset.id === preset.id
-                  ? "bg-surface text-ink"
-                  : "text-ink-soft hover:text-ink",
+                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs font-semibold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               )}
             >
               {preset.label}
@@ -54,64 +51,55 @@ export function PomodoroCard({
         </div>
       }
     >
-      <div className="flex min-h-full flex-col items-center justify-center gap-3 py-1">
-        <div className="relative grid place-items-center">
-          <svg width="132" height="132" className="-rotate-90">
+      <div className="flex min-h-full flex-col items-center justify-center py-1">
+        {/* Circular Dial Countdown Area */}
+        <div className="relative w-40 h-40 flex items-center justify-center my-1">
+          <svg className="w-36 h-36 transform -rotate-90" viewBox="0 0 160 160">
+            {/* Background Hairline Ring */}
+            <circle cx="80" cy="80" fill="transparent" r="68" stroke="currentColor" className="text-slate-200 dark:text-slate-800" strokeWidth="4" />
+            {/* Active Progress Stroke */}
             <circle
-              cx="66"
-              cy="66"
-              r={radius}
-              fill="none"
-              strokeWidth="8"
-              className="stroke-surface-muted"
-            />
-            <circle
-              cx="66"
-              cy="66"
-              r={radius}
-              fill="none"
-              strokeWidth="8"
+              className="transition-all duration-1000 ease-linear"
+              cx="80"
+              cy="80"
+              fill="transparent"
+              r="68"
+              stroke={p.phase === "focus" ? "#15803D" : "#0284c7"}
+              strokeDasharray="427.26"
+              strokeDashoffset={427.26 * (1 - p.progress)}
               strokeLinecap="round"
-              strokeDasharray={circ}
-              strokeDashoffset={circ * (1 - p.progress)}
-              className={cn(
-                "transition-[stroke-dashoffset] duration-500",
-                p.phase === "focus" ? "stroke-accent" : "stroke-sky-400",
-              )}
+              strokeWidth="4"
             />
           </svg>
-          <div className="absolute flex flex-col items-center">
-            <span
-              className={cn(
-                "mb-0.5 text-[11px] font-semibold uppercase tracking-wide",
-                p.phase === "focus" ? "text-accent-ink" : "text-sky-600",
-              )}
-            >
+          {/* Center Digital Time Display */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-slate-400 dark:text-slate-500">
               {p.phase === "focus" ? t.stateFocus : t.stateBreak}
             </span>
-            <span className="text-2xl font-semibold tabular-nums tracking-tight text-ink">
+            <span className="text-3xl font-semibold font-mono tracking-tight text-slate-900 dark:text-slate-100 mt-0.5 tabular-nums">
               {mm}:{ss}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Timer Controls */}
+        <div className="flex items-center gap-2 mt-1">
           <button
             type="button"
             onClick={p.toggle}
-            className="flex h-10 items-center gap-2 rounded-full bg-btn pl-4 pr-5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#0f172a] dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 rounded-md text-xs font-semibold shadow-xs min-w-[76px] justify-center transition-colors"
           >
-            {p.running ? <Pause size={16} /> : <Play size={16} />}
-            {p.running ? t.pause : t.start}
+            {p.running ? <Pause size={13} /> : <Play size={13} />}
+            <span>{p.running ? t.pause : t.start}</span>
           </button>
           <Tooltip label={t.skipTooltip}>
             <button
               type="button"
               aria-label={t.skipTooltip}
               onClick={p.switchPhase}
-              className="grid h-10 w-10 place-items-center rounded-full bg-surface-muted text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
+              className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md transition-colors"
             >
-              <SkipForward size={16} />
+              <SkipForward size={14} />
             </button>
           </Tooltip>
           <Tooltip label={t.resetTooltip}>
@@ -119,14 +107,14 @@ export function PomodoroCard({
               type="button"
               aria-label={t.resetTooltip}
               onClick={p.reset}
-              className="grid h-10 w-10 place-items-center rounded-full bg-surface-muted text-ink-soft transition-colors hover:bg-surface-hover hover:text-ink"
+              className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md transition-colors"
             >
-              <RotateCcw size={16} />
+              <RotateCcw size={14} />
             </button>
           </Tooltip>
         </div>
 
-        <p className="text-xs text-ink-faint">
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2.5 font-medium">
           {t.footer(p.preset.focus, p.preset.break)}
         </p>
       </div>

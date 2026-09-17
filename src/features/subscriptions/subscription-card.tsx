@@ -14,15 +14,15 @@ import {
 } from "./use-subscriptions";
 
 const STATUS_CLASSES: Record<SubscriptionStatus, string> = {
-  normal: "text-emerald-600 dark:text-emerald-400",
-  due_soon: "text-amber-600 dark:text-amber-400",
-  overdue: "text-red-600 dark:text-red-400",
+  normal: "text-slate-500",
+  due_soon: "text-amber-700 font-medium",
+  overdue: "text-red-700 font-medium",
 };
 
 const STATUS_CHIP_CLASSES: Record<SubscriptionStatus, string> = {
-  normal: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  due_soon: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  overdue: "bg-red-500/10 text-red-700 dark:text-red-300",
+  normal: "bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-[4px]",
+  due_soon: "bg-amber-50 text-amber-700 border border-amber-200 rounded-[4px]",
+  overdue: "bg-red-50 text-red-700 border border-red-200 rounded-[4px]",
 };
 
 export function SubscriptionCard({
@@ -41,6 +41,18 @@ export function SubscriptionCard({
   const [error, setError] = useState<string | null>(null);
   const locale = useLocale();
   const t = messages[locale].features.subscriptions;
+
+  // Calculate monthly total
+  const monthlyTotal = subscriptions.reduce((sum, sub) => {
+    let monthlyAmount = sub.amount;
+    if (sub.billingCycle === "yearly") monthlyAmount = sub.amount / 12;
+    return sum + monthlyAmount;
+  }, 0);
+
+  const formattedTotal = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(monthlyTotal);
 
   async function handleAdd(draft: SubscriptionDraft) {
     await addSubscription(draft);
@@ -61,7 +73,14 @@ export function SubscriptionCard({
   return (
     <BentoCard
       icon={CreditCard}
-      title={t.title}
+      title={
+        <div className="flex items-center gap-2">
+          <span>{t.title}</span>
+          <span className="font-mono text-[11px] font-normal text-slate-500 tabular-nums">
+            {formattedTotal}₫/mo
+          </span>
+        </div>
+      }
       scrollBody={false}
       className={className}
       editMode={editMode}
@@ -70,23 +89,23 @@ export function SubscriptionCard({
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-btn pl-3 pr-3.5 text-[13px] font-semibold text-btn-ink transition-colors hover:opacity-90"
+          className="flex h-7 items-center gap-1.5 rounded-md bg-[#15803D] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[#166534] shadow-sm"
         >
-          <Plus size={16} />
+          <Plus size={14} />
           {t.addSubscription}
         </button>
       }
     >
       <div className="flex h-full flex-col">
         {error ? (
-          <p className="mb-3 rounded-[var(--radius-inner)] bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-300">
+          <p className="mb-3 rounded-md bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200">
             {error}
           </p>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-0.5">
+        <div className="flex min-h-0 flex-1 flex-col divide-y divide-slate-100 overflow-y-auto">
           {subscriptions.length === 0 ? (
-            <p className="grid flex-1 place-items-center text-center text-sm text-ink-faint whitespace-pre-line">
+            <p className="grid flex-1 place-items-center text-center text-xs text-slate-400 whitespace-pre-line py-8">
               {t.empty}
             </p>
           ) : (
@@ -131,7 +150,7 @@ function SubscriptionRow({
   }).format(subscription.amount);
 
   return (
-    <div className="group relative flex items-center gap-3 rounded-[var(--radius-inner)] bg-surface-sunken px-3 py-2">
+    <div className="group relative flex items-center gap-3 px-1 py-2.5 transition-colors hover:bg-slate-50/70 rounded-md">
       <Tooltip label={t.confirmPayment}>
         <button
           type="button"
@@ -139,56 +158,65 @@ function SubscriptionRow({
           disabled={confirming}
           aria-label={t.confirmPayment}
           className={cn(
-            "grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors",
+            "grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors",
             confirming
-              ? "border-accent/40 bg-accent/10 text-accent"
-              : "border-line text-transparent hover:border-ink-faint hover:text-ink-soft",
+              ? "border-[#15803D]/40 bg-emerald-50 text-[#15803D]"
+              : "border-slate-300 text-transparent hover:border-slate-400 hover:text-slate-400",
           )}
         >
           {confirming ? (
-            <Loader2 size={13} className="animate-spin" />
+            <Loader2 size={11} className="animate-spin text-[#15803D]" />
           ) : (
-            <Check size={13} strokeWidth={3} />
+            <Check size={11} strokeWidth={3} />
           )}
         </button>
       </Tooltip>
 
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <p className="min-w-0 truncate text-sm font-medium text-ink">
+          <p className="min-w-0 truncate text-xs font-medium text-slate-800">
             {subscription.name}
           </p>
           <span
             className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              "shrink-0 px-1.5 py-0.5 text-[10px] font-medium leading-none",
               STATUS_CHIP_CLASSES[subscription.status],
             )}
           >
             {t.status[subscription.status]}
           </span>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-          <span className={cn("font-semibold", STATUS_CLASSES[subscription.status])}>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
+          <span className={STATUS_CLASSES[subscription.status]}>
             {t.renewsOn(formatDate(subscription.nextRenewalDate, locale))}
           </span>
-          <span>{t.amount(amount)}</span>
-          <span>{t.cycle[subscription.billingCycle]}</span>
           {subscription.lastPaymentDate ? (
-            <span>{t.lastPaid(formatDate(subscription.lastPaymentDate, locale))}</span>
+            <span>• {t.lastPaid(formatDate(subscription.lastPaymentDate, locale))}</span>
           ) : null}
         </div>
       </div>
 
-      <Tooltip label={t.deleteTooltip}>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={t.deleteTooltip}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-faint opacity-0 transition hover:bg-surface-hover hover:text-ink group-hover:opacity-100"
-        >
-          <X size={15} />
-        </button>
-      </Tooltip>
+      <div className="flex items-center gap-2 text-right">
+        <div>
+          <span className="font-mono text-xs font-semibold tabular-nums text-slate-800">
+            {amount}₫
+          </span>
+          <p className="text-[10px] text-slate-400 leading-none">
+            {t.cycle[subscription.billingCycle]}
+          </p>
+        </div>
+
+        <Tooltip label={t.deleteTooltip}>
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={t.deleteTooltip}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100"
+          >
+            <X size={13} />
+          </button>
+        </Tooltip>
+      </div>
     </div>
   );
 }

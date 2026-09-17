@@ -1,12 +1,9 @@
-import { Check, Moon, Sun, Trash2 } from "lucide-react";
-import Image from "next/image";
+import { Moon, Sun, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "../lib/cn";
 import { LanguageSwitcher } from "./language-switcher";
 import {
 	ARCHIVE_DAY_OPTIONS,
-	BACKGROUNDS,
-	PRIMARY_COLORS,
 	PURGE_DAY_OPTIONS,
 	type Settings,
 } from "../lib/settings";
@@ -14,7 +11,6 @@ import { countDoneOlderThan, purgeDoneOlderThan } from "../lib/archived-tasks";
 import { useConfirm } from "./confirm-dialog";
 import { FieldLabel, TextField } from "./form-controls";
 import { Modal } from "./modal";
-import { Tooltip } from "./ui/tooltip";
 import {
 	Select,
 	SelectContent,
@@ -54,8 +50,6 @@ export function SettingsModal({
 	const t = messages[locale].components.settings;
 	const archiveDayLabels = t.archiveDays;
 	const purgeDayLabels = t.purgeDays;
-	const colorLabels = t.primaryColors;
-	const backgroundLabels = t.backgrounds;
 
 	async function handlePurge() {
 		if (purging) return;
@@ -139,71 +133,6 @@ export function SettingsModal({
 					locale={locale}
 				/>
 
-				<div>
-					<FieldLabel>{t.primaryColor}</FieldLabel>
-					<div className="flex flex-wrap gap-2">
-						{PRIMARY_COLORS.map((c, index) => (
-							<Tooltip
-								key={c.value}
-								label={colorLabels[index]}
-							>
-								<button
-									type="button"
-									aria-label={colorLabels[index]}
-									onClick={() => onUpdate({ primary: c.value })}
-									style={{ backgroundColor: c.value }}
-									className={cn(
-										"grid h-9 w-9 place-items-center rounded-full text-white transition-transform hover:scale-105",
-										settings.primary === c.value &&
-											"ring-2 ring-ink ring-offset-2 ring-offset-[var(--color-surface)]",
-									)}
-								>
-									{settings.primary === c.value ? <Check size={16} /> : null}
-								</button>
-							</Tooltip>
-						))}
-					</div>
-				</div>
-
-				<div>
-					<FieldLabel>{t.background}</FieldLabel>
-					<div className="grid grid-cols-3 gap-2">
-						{BACKGROUNDS.map((bg, index) => (
-							<Tooltip
-								key={bg.value || bg.name}
-								label={backgroundLabels[index]}
-							>
-								<button
-									type="button"
-									aria-label={backgroundLabels[index]}
-									onClick={() => onUpdate({ background: bg.value })}
-									className={cn(
-										"relative aspect-video overflow-hidden rounded-[var(--radius-inner)] bg-surface-muted ring-2 transition",
-										settings.background === bg.value
-											? "ring-accent"
-											: "ring-transparent hover:ring-line",
-									)}
-								>
-									{bg.value ? (
-										<Image
-											src={bg.value}
-											alt={backgroundLabels[index]}
-											fill
-											loading="eager"
-											sizes="(min-width: 640px) 176px, 30vw"
-											className="object-cover"
-										/>
-									) : (
-										<span className="grid h-full place-items-center text-[11px] font-medium text-ink-soft">
-											{backgroundLabels[index]}
-										</span>
-									)}
-								</button>
-							</Tooltip>
-						))}
-					</div>
-				</div>
-
 				<div className="space-y-4">
 					<div>
 						<FieldLabel>{t.autoArchive}</FieldLabel>
@@ -254,14 +183,14 @@ export function SettingsModal({
 								type="button"
 								onClick={handlePurge}
 								disabled={purging}
-								className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-muted px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+								className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								<Trash2 size={15} />
+								<Trash2 size={13} />
 								{t.purgeButton}
 							</button>
 							</div>
 							{purgeError ? (
-								<p role="alert" className="mt-2 text-sm text-red-600">
+								<p role="alert" className="mt-2 text-xs text-red-600">
 									{locale === "vi" ? "Không thể xóa công việc: " : "Could not purge tasks: "}
 									{purgeError}
 								</p>
@@ -290,10 +219,10 @@ function ThemeOption({
 			type="button"
 			onClick={onClick}
 			className={cn(
-				"flex h-11 items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors",
+				"flex h-9 items-center justify-center gap-2 rounded-md border text-xs font-medium transition-colors",
 				active
-					? "bg-accent-strong text-white"
-					: "bg-surface-muted text-ink-soft hover:bg-surface-hover",
+					? "border-[#15803D] bg-emerald-50/50 text-[#15803D] ring-1 ring-[#15803D]"
+					: "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
 			)}
 		>
 			{icon}
