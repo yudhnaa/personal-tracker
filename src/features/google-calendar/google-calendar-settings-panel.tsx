@@ -54,7 +54,7 @@ export function GoogleCalendarSettingsPanel({
                     {connection.reconnectRequired ? (
                       <button
                         type="button"
-                        onClick={calendar.connect}
+                        onClick={() => calendar.connect(connection.id)}
                         className="flex items-center gap-1.5 rounded-full bg-btn px-3 py-1.5 text-xs font-semibold text-btn-ink transition-colors hover:opacity-90"
                       >
                         <ExternalLink size={14} />
@@ -123,7 +123,7 @@ export function GoogleCalendarSettingsPanel({
           })}
           <button
             type="button"
-            onClick={calendar.connect}
+            onClick={() => calendar.connect()}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-btn px-4 py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
           >
             <ExternalLink size={16} />
@@ -133,7 +133,7 @@ export function GoogleCalendarSettingsPanel({
       ) : (
         <button
           type="button"
-          onClick={calendar.connect}
+          onClick={() => calendar.connect()}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-btn px-4 py-2.5 text-sm font-semibold text-btn-ink transition-colors hover:opacity-90"
         >
           <ExternalLink size={16} />

@@ -124,9 +124,12 @@ export function useGoogleCalendar() {
     return () => window.clearInterval(interval);
   }, [connection.connected, healthyConnections, range, syncNow]);
 
-  function connect() {
+  function connect(connectionId?: string) {
     try {
-      window.location.assign(accountBoundGatewayNavigationUrl("/api/v1/google-calendar/connect"));
+      const path = connectionId
+        ? `/api/v1/google-calendar/connect?connectionId=${encodeURIComponent(connectionId)}`
+        : "/api/v1/google-calendar/connect";
+      window.location.assign(accountBoundGatewayNavigationUrl(path));
     } catch (error) {
       if (!(error instanceof ClientSessionChangedError)) throw error;
     }
