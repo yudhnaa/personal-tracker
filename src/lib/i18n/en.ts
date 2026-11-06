@@ -254,7 +254,7 @@ export const en = {
 		},
 		footer: {
 			tagline: "Designed for individual intentionality.",
-			privacyPolicy: "Private Data Policy",
+			privacyPolicy: "Privacy Policy",
 			cloudSync: "Cloud Sync",
 			version: "v2.4.0",
 		},

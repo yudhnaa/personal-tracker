@@ -363,9 +363,12 @@ export function LandingPage({
 
 					{/* Footer Policy & Version Links */}
 					<div className="flex items-center space-x-6">
-						<span className="hover:text-slate-800 transition-colors">
+						<Link
+							href="/policy"
+							className="hover:text-slate-800 transition-colors underline-offset-4 hover:underline"
+						>
 							{t.landing.footer.privacyPolicy}
-						</span>
+						</Link>
 						<span className="hover:text-slate-800 transition-colors">
 							{t.landing.footer.cloudSync}
 						</span>

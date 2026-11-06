@@ -260,7 +260,7 @@ export const vi: Messages = {
 		},
 		footer: {
 			tagline: "Được thiết kế cho sự tập trung và chủ đích cá nhân.",
-			privacyPolicy: "Chính sách dữ liệu riêng tư",
+			privacyPolicy: "Chính sách quyền riêng tư",
 			cloudSync: "Đồng bộ đám mây",
 			version: "v2.4.0",
 		},

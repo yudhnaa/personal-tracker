@@ -6,6 +6,9 @@ import { LocaleProvider } from "@/components/locale-provider";
 export const metadata: Metadata = {
   title: "Personal Tracker",
   description: "A private Bento-grid dashboard for everyday planning.",
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+  },
 };
 
 import { QueryProvider } from "@/components/query-provider";
