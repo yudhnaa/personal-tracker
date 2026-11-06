@@ -25,6 +25,11 @@ export type GoogleCalendarListItem = {
   selected: boolean;
 };
 
+export type GoogleCalendarEventReminders = {
+  useDefault: boolean;
+  minutes?: number | null;
+};
+
 export type GoogleCalendarEvent = {
   connectionId: string;
   googleAccountId: string;
@@ -39,6 +44,8 @@ export type GoogleCalendarEvent = {
   etag: string | null;
   htmlLink: string | null;
   updated: string | null;
+  attendees?: string[];
+  reminders?: GoogleCalendarEventReminders | null;
 };
 
 export type GoogleCalendarEventDraft = {
@@ -50,6 +57,8 @@ export type GoogleCalendarEventDraft = {
   start: string;
   end: string;
   allDay?: boolean;
+  attendees?: string[];
+  reminders?: GoogleCalendarEventReminders | null;
 };
 
 export type GoogleCalendarEventPatch = Partial<GoogleCalendarEventDraft>;

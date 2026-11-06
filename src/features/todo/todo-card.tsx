@@ -166,6 +166,8 @@ export function TodoCard({ className, googleCalendar, editMode, onHide }: TodoCa
       <TaskDetailDialog
         task={detailTask}
         event={detailEvent}
+        googleCalendarConnected={googleCalendar.connection.connected}
+        googleCalendars={googleCalendar.calendars}
         onClose={() => {
           setDetailTaskId(null);
           setDetailEvent(null);

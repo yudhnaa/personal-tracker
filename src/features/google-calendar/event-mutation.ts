@@ -16,5 +16,7 @@ export function buildGoogleEventPatch(
     start: desired.start,
     end: desired.end,
     allDay: desired.allDay,
+    attendees: desired.attendees,
+    reminders: desired.reminders,
   };
 }

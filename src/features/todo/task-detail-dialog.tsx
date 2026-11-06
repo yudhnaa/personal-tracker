@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { Bell, ChevronDown, Plus, Trash2, Users, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { toIsoDate } from "../../lib/date";
 import { useConfirm } from "../../components/confirm-dialog";
@@ -11,13 +11,15 @@ import { TaskChecklist } from "./task-checklist";
 import { STATUS_META, TASK_STATUSES, type Task } from "./task-types";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
-import type { GoogleCalendarEvent, GoogleCalendarEventPatch } from "../google-calendar/types";
+import type { GoogleCalendarEvent, GoogleCalendarEventPatch, GoogleCalendarListItem } from "../google-calendar/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type TaskDetailDialogProps = {
   task: Task | null;
   event: GoogleCalendarEvent | null;
+  googleCalendarConnected?: boolean;
+  googleCalendars?: GoogleCalendarListItem[];
   onClose: () => void;
   onPatchTask?: (patch: Partial<Task>) => void;
   onDeleteTask?: () => void;
@@ -42,6 +44,8 @@ export function TaskDetailDialog({
 function TaskDetailDialogContent({
   task,
   event,
+  googleCalendarConnected = false,
+  googleCalendars = [],
   onClose,
   onPatchTask,
   onDeleteTask,
@@ -52,11 +56,17 @@ function TaskDetailDialogContent({
   const confirm = useConfirm();
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
+  const [attendeeInput, setAttendeeInput] = useState("");
   const activeItem = task || event;
   const locale = useLocale();
   const t = messages[locale].features.todo;
 
   const isEvent = !!event;
+
+  const enabledGoogleCalendars = useMemo(
+    () => (googleCalendarConnected ? googleCalendars.filter((calendar) => calendar.selected) : []),
+    [googleCalendarConnected, googleCalendars],
+  );
 
   if (!activeItem) {
     return <Modal open={false} title="" onClose={onClose}>{null}</Modal>;
@@ -126,6 +136,57 @@ function TaskDetailDialogContent({
   function patchLocation(location: string) {
     if (isEvent) onPatchEvent?.({ location });
     else onPatchTask?.({ location });
+  }
+
+  function handleCalendarChange(value: string) {
+    const selected = parseCalendarSelectValue(value);
+    if (isEvent) {
+      if (selected.calendarId && selected.calendarId !== event?.calendarId) {
+        onPatchEvent?.({ calendarId: selected.calendarId });
+      }
+    } else {
+      const cal = enabledGoogleCalendars.find(
+        (c) => c.connectionId === selected.connectionId && c.id === selected.calendarId,
+      );
+      onPatchTask?.({
+        googleCalendarConnectionId: selected.connectionId || undefined,
+        googleCalendarAccountId: cal?.googleAccountId || undefined,
+        googleCalendarId: selected.calendarId || undefined,
+      });
+    }
+  }
+
+  const attendeeList = event?.attendees ?? [];
+
+  function handleAddAttendee() {
+    const email = attendeeInput.trim();
+    if (!email || !email.includes("@") || attendeeList.includes(email)) return;
+    onPatchEvent?.({ attendees: [...attendeeList, email] });
+    setAttendeeInput("");
+  }
+
+  function handleRemoveAttendee(emailToRemove: string) {
+    onPatchEvent?.({ attendees: attendeeList.filter((e) => e !== emailToRemove) });
+  }
+
+  const currentReminders = isEvent ? event?.reminders : undefined;
+  const reminderSelectValue = currentReminders
+    ? currentReminders.useDefault
+      ? "default"
+      : currentReminders.minutes != null
+        ? String(currentReminders.minutes)
+        : "none"
+    : "default";
+
+  function handleReminderChange(val: string) {
+    if (!isEvent) return;
+    if (val === "default") {
+      onPatchEvent?.({ reminders: { useDefault: true } });
+    } else if (val === "none") {
+      onPatchEvent?.({ reminders: { useDefault: false, minutes: null } });
+    } else {
+      onPatchEvent?.({ reminders: { useDefault: false, minutes: Number(val) } });
+    }
   }
 
   // Status pills live in the modal header
@@ -364,6 +425,126 @@ function TaskDetailDialogContent({
           </div>
         )}
 
+        {/* Google Calendar */}
+        {googleCalendarConnected && (isEvent || task?.googleCalendarId || task?.dueDate || task?.startAt) ? (
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-ink-faint mb-1.5 flex items-center gap-1.5">
+              {t.detail.calendarLabel}
+            </label>
+            {enabledGoogleCalendars.length ? (
+              <div className="relative">
+                <select
+                  value={
+                    isEvent
+                      ? calendarSelectValue(event?.connectionId, event?.calendarId)
+                      : calendarSelectValue(task?.googleCalendarConnectionId, task?.googleCalendarId)
+                  }
+                  onChange={(e) => handleCalendarChange(e.target.value)}
+                  className="w-full h-10 pl-3 pr-8 rounded-[var(--radius-inner)] bg-surface-sunken border border-surface-muted text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 cursor-pointer appearance-none"
+                >
+                  {!isEvent && <option value="">{t.dialog.localOnlyOption}</option>}
+                  {enabledGoogleCalendars.map((calendar) => (
+                    <option
+                      key={`${calendar.connectionId}:${calendar.id}`}
+                      value={calendarSelectValue(calendar.connectionId, calendar.id)}
+                    >
+                      {calendar.googleEmail} - {calendar.summary}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink-faint">
+                  <ChevronDown size={14} />
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-[var(--radius-inner)] bg-surface-sunken px-3 py-2 text-sm text-ink-faint">
+                {t.dialog.noSyncedCalendars}
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        {/* Attendees (Google event only) */}
+        {isEvent && (
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-ink-faint mb-1.5 flex items-center gap-1.5">
+              <Users size={13} />
+              {t.detail.attendeesLabel}
+            </label>
+            <div className="space-y-2">
+              {attendeeList.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {attendeeList.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-xs text-ink"
+                    >
+                      <span>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAttendee(email)}
+                        className="text-ink-faint hover:text-red-500 transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={attendeeInput}
+                  onChange={(e) => setAttendeeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddAttendee();
+                    }
+                  }}
+                  placeholder={t.detail.attendeesPlaceholder}
+                  className="flex-1 h-9 px-3 rounded-[var(--radius-inner)] bg-surface-sunken border border-surface-muted text-sm text-ink outline-none focus:ring-2 focus:ring-accent/40 placeholder:text-ink-faint"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddAttendee}
+                  className="px-3 h-9 rounded-[var(--radius-inner)] bg-surface-muted hover:bg-surface-hover text-ink text-xs font-semibold transition-colors flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reminders (Google event only) */}
+        {isEvent && (
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-ink-faint mb-1.5 flex items-center gap-1.5">
+              <Bell size={13} />
+              {t.detail.remindersLabel}
+            </label>
+            <div className="relative">
+              <select
+                value={reminderSelectValue}
+                onChange={(e) => handleReminderChange(e.target.value)}
+                className="w-full h-10 pl-3 pr-8 rounded-[var(--radius-inner)] bg-surface-sunken border border-surface-muted text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 cursor-pointer appearance-none"
+              >
+                <option value="default">{t.detail.reminderOptions.default}</option>
+                <option value="none">{t.detail.reminderOptions.none}</option>
+                <option value="10">{t.detail.reminderOptions.min10}</option>
+                <option value="15">{t.detail.reminderOptions.min15}</option>
+                <option value="30">{t.detail.reminderOptions.min30}</option>
+                <option value="60">{t.detail.reminderOptions.hour1}</option>
+                <option value="1440">{t.detail.reminderOptions.day1}</option>
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink-faint">
+                <ChevronDown size={14} />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Advanced / Meta */}
         <details className="group rounded-[var(--radius-inner)] border border-surface-muted [&_summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer px-3.5 py-2.5 text-sm font-medium text-ink-faint outline-none transition-colors hover:text-ink">
@@ -414,4 +595,18 @@ function normalizeTimedRange(
     return { start: new Date(endMs - previousDuration).toISOString(), end: nextEnd };
   }
   return { start: nextStart, end: new Date(startMs + MIN_EVENT_DURATION_MS).toISOString() };
+}
+
+function calendarSelectValue(connectionId?: string, calendarId?: string) {
+  if (!connectionId || !calendarId) return "";
+  return `${encodeURIComponent(connectionId)}:${encodeURIComponent(calendarId)}`;
+}
+
+function parseCalendarSelectValue(value: string) {
+  if (!value) return { connectionId: "", calendarId: "" };
+  const [connectionId = "", calendarId = ""] = value.split(":");
+  return {
+    connectionId: decodeURIComponent(connectionId),
+    calendarId: decodeURIComponent(calendarId),
+  };
 }
