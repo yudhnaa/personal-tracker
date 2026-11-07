@@ -312,9 +312,17 @@ export function CalendarView({
 												className={cn(
 													"flex cursor-pointer items-center justify-between gap-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-tight",
 													STATUS_META[item.task.status].chip,
+													item.task.status === "done" && "opacity-75",
 												)}
 											>
-												<span className="truncate">{item.task.title}</span>
+												<span
+													className={cn(
+														"truncate",
+														item.task.status === "done" && "line-through",
+													)}
+												>
+													{item.task.title}
+												</span>
 												{item.task.source === "google" && (
 													<CalendarClock
 														size={10}

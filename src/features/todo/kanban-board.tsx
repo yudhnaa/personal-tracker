@@ -24,7 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarClock, Check, ListChecks, Plus } from "lucide-react";
 import { cn } from "../../lib/cn";
-import { dueState, formatShortDate } from "../../lib/date";
+import { dueState, formatShortDate, isOverdueByDays } from "../../lib/date";
 import {
   STATUS_META,
   TASK_STATUSES,
@@ -61,17 +61,37 @@ export function KanbanBoard({
   onAddTask,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [columns, setColumns] = useState<Columns>(() =>
-    columnsFromStatus(byStatus),
-  );
 
-  const taskMap = useMemo(() => {
-    const m = new Map<string, Task>();
-    for (const s of TASK_STATUSES) for (const t of byStatus[s]) m.set(t.id, t);
-    return m;
+  // Filter out tasks overdue by 3 days or more on the Kanban board
+  const { visibleByStatus, hiddenTasks, taskMap } = useMemo(() => {
+    const visible: Record<TaskStatus, Task[]> = {
+      backlog: [],
+      todo: [],
+      doing: [],
+      done: [],
+    };
+    const hidden: Task[] = [];
+    const map = new Map<string, Task>();
+
+    for (const s of TASK_STATUSES) {
+      for (const t of byStatus[s]) {
+        map.set(t.id, t);
+        const deadline = t.dueDate || t.endAt || "";
+        if (isOverdueByDays(deadline, 3)) {
+          hidden.push(t);
+        } else {
+          visible[s].push(t);
+        }
+      }
+    }
+    return { visibleByStatus: visible, hiddenTasks: hidden, taskMap: map };
   }, [byStatus]);
 
-  const visibleColumns = activeId ? columns : columnsFromStatus(byStatus);
+  const [columns, setColumns] = useState<Columns>(() =>
+    columnsFromStatus(visibleByStatus),
+  );
+
+  const visibleColumns = activeId ? columns : columnsFromStatus(visibleByStatus);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -100,11 +120,14 @@ export function KanbanBoard({
         if (t) flat.push(t.status === status ? t : { ...t, status });
       }
     }
+    for (const hidden of hiddenTasks) {
+      flat.push(hidden);
+    }
     onReorder(flat);
   }
 
   function handleDragStart(e: DragStartEvent) {
-    setColumns(columnsFromStatus(byStatus));
+    setColumns(columnsFromStatus(visibleByStatus));
     setActiveId(e.active.id as string);
   }
 

@@ -33,3 +33,16 @@ export function dueState(iso: string): "none" | "overdue" | "today" | "upcoming"
   if (dateOnly === today) return "today";
   return "upcoming";
 }
+
+/** Returns true if a given due date string is overdue by at least `days` days compared to today. */
+export function isOverdueByDays(iso: string, days: number = 3): boolean {
+  if (!iso) return false;
+  const dateOnly = iso.slice(0, 10);
+  const today = todayIso();
+  if (dateOnly >= today) return false;
+
+  const todayMs = new Date(`${today}T00:00:00`).getTime();
+  const dueMs = new Date(`${dateOnly}T00:00:00`).getTime();
+  const diffDays = Math.round((todayMs - dueMs) / (24 * 60 * 60 * 1000));
+  return diffDays >= days;
+}
