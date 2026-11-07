@@ -11,12 +11,13 @@ import {
 import { todayIso } from "../../lib/date";
 import { messages } from "../../lib/i18n";
 import { useLocale } from "../../components/locale-provider";
-import type { BillingCycle, SubscriptionDraft } from "./use-subscriptions";
+import type { BillingCycle, Subscription, SubscriptionDraft } from "./use-subscriptions";
 
 type SubscriptionDialogProps = {
   open: boolean;
   onClose: () => void;
   onSubmit: (draft: SubscriptionDraft) => Promise<void>;
+  initial?: Subscription | null;
 };
 
 const EMPTY: SubscriptionDraft = {
@@ -30,18 +31,34 @@ const EMPTY: SubscriptionDraft = {
 export function SubscriptionDialog({
 	...props
 }: SubscriptionDialogProps) {
-	return <SubscriptionDialogForm key={props.open ? "open" : "closed"} {...props} />;
+	return (
+		<SubscriptionDialogForm
+			key={props.open ? (props.initial ? `edit-${props.initial.id}` : "add") : "closed"}
+			{...props}
+		/>
+	);
 }
 
 function SubscriptionDialogForm({
   open,
   onClose,
   onSubmit,
+  initial,
 }: SubscriptionDialogProps) {
-  const [draft, setDraft] = useState<SubscriptionDraft>(() => ({
-    ...EMPTY,
-    nextRenewalDate: todayIso(),
-  }));
+  const [draft, setDraft] = useState<SubscriptionDraft>(() =>
+    initial
+      ? {
+          name: initial.name,
+          amount: initial.amount,
+          billingCycle: initial.billingCycle,
+          nextRenewalDate: initial.nextRenewalDate,
+          lastPaymentDate: initial.lastPaymentDate ?? null,
+        }
+      : {
+          ...EMPTY,
+          nextRenewalDate: todayIso(),
+        },
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const locale = useLocale();
@@ -66,7 +83,7 @@ function SubscriptionDialogForm({
   }
 
   return (
-    <Modal open={open} title={t.title} onClose={onClose}>
+    <Modal open={open} title={initial ? (t.editTitle ?? t.title) : t.title} onClose={onClose}>
       <div className="space-y-4">
         <div>
           <FieldLabel>{t.name}</FieldLabel>

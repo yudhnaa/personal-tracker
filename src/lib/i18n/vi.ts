@@ -53,7 +53,6 @@ export const vi: Messages = {
 			dark: "Tối",
 			primaryColor: "Màu chủ đạo",
 			background: "Ảnh nền",
-			autoArchive: "Tự ẩn task đã xong cũ hơn",
 			purgeOlder: "Xoá hẳn task đã xong cũ hơn",
 			purgeButton: "Xoá",
 			noTasksTitle: "Không có task để dọn",
@@ -62,7 +61,6 @@ export const vi: Messages = {
 			purgeTitle: (count: number) => `Xoá ${count} task đã xong?`,
 			purgeMessage: (days: number) =>
 				`Các task đã xong cũ hơn ${days} ngày sẽ bị xoá vĩnh viễn. Task chưa xong không bị ảnh hưởng.`,
-			archiveDays: ["30 ngày", "90 ngày", "180 ngày", "1 năm", "Không ẩn"],
 			purgeDays: ["30 ngày", "90 ngày", "180 ngày", "1 năm"],
 			primaryColors: [
 				"Xanh ngọc",
@@ -315,6 +313,7 @@ export const vi: Messages = {
 			title: "Gói định kỳ",
 			empty: "Chưa có gói định kỳ nào.\nThêm một gói để theo dõi ngày gia hạn.",
 			addSubscription: "Thêm gói",
+			editSubscription: "Sửa gói định kỳ",
 			confirmPayment: "Xác nhận đã thanh toán",
 			confirmError: "Không thể xác nhận thanh toán. Vui lòng thử lại.",
 			deleteError: "Không thể xoá gói định kỳ. Vui lòng thử lại.",
@@ -333,6 +332,7 @@ export const vi: Messages = {
 			},
 			dialog: {
 				title: "Thêm gói định kỳ",
+				editTitle: "Chỉnh sửa gói định kỳ",
 				name: "Tên",
 				namePlaceholder: "Netflix, Spotify, iCloud...",
 				amount: "Số tiền",

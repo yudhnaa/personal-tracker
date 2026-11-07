@@ -3,7 +3,6 @@ import { useState } from "react";
 import { cn } from "../lib/cn";
 import { LanguageSwitcher } from "./language-switcher";
 import {
-	ARCHIVE_DAY_OPTIONS,
 	PURGE_DAY_OPTIONS,
 	type Settings,
 } from "../lib/settings";
@@ -48,7 +47,6 @@ export function SettingsModal({
 	const [purging, setPurging] = useState(false);
 	const [purgeError, setPurgeError] = useState<string | null>(null);
 	const t = messages[locale].components.settings;
-	const archiveDayLabels = t.archiveDays;
 	const purgeDayLabels = t.purgeDays;
 
 	async function handlePurge() {
@@ -134,28 +132,6 @@ export function SettingsModal({
 				/>
 
 				<div className="space-y-4">
-					<div>
-						<FieldLabel>{t.autoArchive}</FieldLabel>
-						<Select
-							value={String(settings.archiveDays)}
-							onValueChange={(v) => onUpdate({ archiveDays: Number(v) })}
-						>
-							<SelectTrigger>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{ARCHIVE_DAY_OPTIONS.map((o, index) => (
-									<SelectItem
-										key={o.value}
-										value={String(o.value)}
-									>
-										{archiveDayLabels[index]}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
-
 					<div>
 						<FieldLabel>{t.purgeOlder}</FieldLabel>
 						<div className="flex gap-2">

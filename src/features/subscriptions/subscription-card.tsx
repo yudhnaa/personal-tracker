@@ -1,4 +1,4 @@
-import { Check, CreditCard, Loader2, Plus, X } from "lucide-react";
+import { Check, CreditCard, Loader2, Pencil, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { BentoCard } from "../../components/bento-card";
 import { Tooltip } from "../../components/ui/tooltip";
@@ -34,9 +34,15 @@ export function SubscriptionCard({
   editMode?: boolean;
   onHide?: () => void;
 }) {
-  const { subscriptions, addSubscription, removeSubscription, confirmPayment } =
-    useSubscriptions();
+  const {
+    subscriptions,
+    addSubscription,
+    updateSubscription,
+    removeSubscription,
+    confirmPayment,
+  } = useSubscriptions();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const locale = useLocale();
@@ -54,8 +60,22 @@ export function SubscriptionCard({
     maximumFractionDigits: 0,
   }).format(monthlyTotal);
 
-  async function handleAdd(draft: SubscriptionDraft) {
-    await addSubscription(draft);
+  async function handleSubmit(draft: SubscriptionDraft) {
+    if (editingSubscription) {
+      await updateSubscription(editingSubscription.id, draft);
+    } else {
+      await addSubscription(draft);
+    }
+  }
+
+  function handleOpenAdd() {
+    setEditingSubscription(null);
+    setDialogOpen(true);
+  }
+
+  function handleOpenEdit(sub: Subscription) {
+    setEditingSubscription(sub);
+    setDialogOpen(true);
   }
 
   async function handleConfirm(id: string) {
@@ -88,7 +108,7 @@ export function SubscriptionCard({
       action={
         <button
           type="button"
-          onClick={() => setDialogOpen(true)}
+          onClick={handleOpenAdd}
           className="flex h-7 items-center gap-1.5 rounded-md bg-[#15803D] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[#166534] shadow-sm"
         >
           <Plus size={14} />
@@ -115,6 +135,7 @@ export function SubscriptionCard({
                 subscription={subscription}
                 confirming={confirmingId === subscription.id}
                 onConfirm={() => handleConfirm(subscription.id)}
+                onEdit={() => handleOpenEdit(subscription)}
                 onRemove={() => removeSubscription(subscription.id).catch(() => setError(t.deleteError))}
               />
             ))
@@ -124,8 +145,12 @@ export function SubscriptionCard({
 
       <SubscriptionDialog
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={handleAdd}
+        initial={editingSubscription}
+        onClose={() => {
+          setDialogOpen(false);
+          setEditingSubscription(null);
+        }}
+        onSubmit={handleSubmit}
       />
     </BentoCard>
   );
@@ -135,11 +160,13 @@ function SubscriptionRow({
   subscription,
   confirming,
   onConfirm,
+  onEdit,
   onRemove,
 }: {
   subscription: Subscription;
   confirming: boolean;
   onConfirm: () => void;
+  onEdit: () => void;
   onRemove: () => void;
 }) {
   const locale = useLocale();
@@ -172,9 +199,12 @@ function SubscriptionRow({
         </button>
       </Tooltip>
 
-      <div className="min-w-0 flex-1">
+      <div
+        className="min-w-0 flex-1 cursor-pointer"
+        onClick={onEdit}
+      >
         <div className="flex min-w-0 items-center gap-2">
-          <p className="min-w-0 truncate text-xs font-medium text-slate-800">
+          <p className="min-w-0 truncate text-xs font-medium text-slate-800 hover:text-[#15803D] transition-colors">
             {subscription.name}
           </p>
           <span
@@ -197,7 +227,10 @@ function SubscriptionRow({
       </div>
 
       <div className="flex items-center gap-2 text-right">
-        <div>
+        <div
+          className="cursor-pointer"
+          onClick={onEdit}
+        >
           <span className="font-mono text-xs font-semibold tabular-nums text-slate-800">
             {amount}₫
           </span>
@@ -205,6 +238,20 @@ function SubscriptionRow({
             {t.cycle[subscription.billingCycle]}
           </p>
         </div>
+
+        <Tooltip label={t.editSubscription}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            aria-label={t.editSubscription}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100"
+          >
+            <Pencil size={12} />
+          </button>
+        </Tooltip>
 
         <Tooltip label={t.deleteTooltip}>
           <button

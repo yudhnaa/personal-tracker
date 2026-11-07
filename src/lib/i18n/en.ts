@@ -51,7 +51,6 @@ export const en = {
 			dark: "Dark",
 			primaryColor: "Primary color",
 			background: "Background image",
-			autoArchive: "Auto-hide completed tasks older than",
 			purgeOlder: "Delete completed tasks older than",
 			purgeButton: "Delete",
 			noTasksTitle: "No tasks to clean",
@@ -61,7 +60,6 @@ export const en = {
 				`Delete ${count} completed task${count === 1 ? "" : "s"}?`,
 			purgeMessage: (days: number) =>
 				`Completed tasks older than ${days} days will be deleted permanently. Incomplete tasks are not affected.`,
-			archiveDays: ["30 days", "90 days", "180 days", "1 year", "Never hide"],
 			purgeDays: ["30 days", "90 days", "180 days", "1 year"],
 			primaryColors: ["Emerald", "Blue", "Violet", "Rose", "Amber", "Slate"],
 			backgrounds: [
@@ -310,6 +308,7 @@ export const en = {
 			title: "Subscriptions",
 			empty: "No subscriptions yet.\nAdd one to track upcoming renewals.",
 			addSubscription: "Add subscription",
+			editSubscription: "Edit subscription",
 			confirmPayment: "Confirm payment",
 			confirmError: "Payment could not be confirmed. Please try again.",
 			deleteError: "Subscription could not be deleted. Please try again.",
@@ -328,6 +327,7 @@ export const en = {
 			},
 			dialog: {
 				title: "Add subscription",
+				editTitle: "Edit subscription",
 				name: "Name",
 				namePlaceholder: "Netflix, Spotify, iCloud...",
 				amount: "Amount",

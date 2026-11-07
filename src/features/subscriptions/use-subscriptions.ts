@@ -31,6 +31,17 @@ export function useSubscriptions() {
     setData(sortSubscriptions(next));
   }
 
+  async function updateSubscription(id: string, draft: SubscriptionDraft) {
+    const updated = await apiJson<Subscription>(`/api/v1/subscriptions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(draft),
+    });
+    setData((prev) =>
+      sortSubscriptions(prev.map((item) => (item.id === id ? updated : item))),
+    );
+    return updated;
+  }
+
   async function removeSubscription(id: string) {
     setData((prev) => prev.filter((item) => item.id !== id));
     try {
@@ -62,6 +73,7 @@ export function useSubscriptions() {
   return {
     subscriptions: sortSubscriptions(subscriptions),
     addSubscription,
+    updateSubscription,
     removeSubscription,
     confirmPayment,
   };

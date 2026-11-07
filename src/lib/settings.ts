@@ -36,15 +36,6 @@ export const DEFAULT_SETTINGS: Settings = {
   hiddenCards: [],
 };
 
-/** Choices for the auto-hide threshold (Settings). */
-export const ARCHIVE_DAY_OPTIONS = [
-  { label: "30 ngày", value: 30 },
-  { label: "90 ngày", value: 90 },
-  { label: "180 ngày", value: 180 },
-  { label: "1 năm", value: 365 },
-  { label: "Không ẩn", value: 0 },
-];
-
 /** Choices for the manual "purge old done tasks" action (Settings). */
 export const PURGE_DAY_OPTIONS = [
   { label: "30 ngày", value: 30 },
