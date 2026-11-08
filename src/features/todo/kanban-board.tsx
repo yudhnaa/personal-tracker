@@ -24,7 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarClock, Check, ListChecks, Plus } from "lucide-react";
 import { cn } from "../../lib/cn";
-import { dueState, formatShortDate, isOverdueByDays } from "../../lib/date";
+import { compareDatesAsc, dueState, formatShortDate, isOverdueByDays } from "../../lib/date";
 import {
   STATUS_META,
   TASK_STATUSES,
@@ -49,6 +49,14 @@ const columnsFromStatus = (byStatus: Record<TaskStatus, Task[]>): Columns =>
     TASK_STATUSES.map((s) => [s, byStatus[s].map((t) => t.id)]),
   ) as Columns;
 
+function compareTasksByDate(a: Task, b: Task): number {
+  const dateA = a.dueDate || a.startAt || a.endAt || "";
+  const dateB = b.dueDate || b.startAt || b.endAt || "";
+  const cmp = compareDatesAsc(dateA, dateB);
+  if (cmp !== 0) return cmp;
+  return (a.createdAt || 0) - (b.createdAt || 0);
+}
+
 /**
  * Four-column board with full sortable drag-and-drop (dnd-kit): cards reorder
  * within a column and move across columns, with siblings shifting to open a
@@ -62,7 +70,7 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // Filter out tasks overdue by 3 days or more on the Kanban board
+  // Filter out tasks overdue by 3 days or more on the Kanban board and sort ascending by date
   const { visibleByStatus, hiddenTasks, taskMap } = useMemo(() => {
     const visible: Record<TaskStatus, Task[]> = {
       backlog: [],
@@ -83,6 +91,7 @@ export function KanbanBoard({
           visible[s].push(t);
         }
       }
+      visible[s].sort(compareTasksByDate);
     }
     return { visibleByStatus: visible, hiddenTasks: hidden, taskMap: map };
   }, [byStatus]);

@@ -46,3 +46,23 @@ export function isOverdueByDays(iso: string, days: number = 3): boolean {
   const diffDays = Math.round((todayMs - dueMs) / (24 * 60 * 60 * 1000));
   return diffDays >= days;
 }
+
+/** Compare two ISO date strings ascending. Empty dates sort last. */
+export function compareDatesAsc(a?: string | null, b?: string | null): number {
+  const strA = a ?? "";
+  const strB = b ?? "";
+
+  if (strA && strB) {
+    const timeA = new Date(strA.includes("T") ? strA : `${strA}T00:00:00`).getTime();
+    const timeB = new Date(strB.includes("T") ? strB : `${strB}T00:00:00`).getTime();
+    if (!isNaN(timeA) && !isNaN(timeB)) {
+      if (timeA !== timeB) return timeA - timeB;
+    } else if (strA !== strB) {
+      return strA.localeCompare(strB);
+    }
+    return 0;
+  }
+  if (strA && !strB) return -1;
+  if (!strA && strB) return 1;
+  return 0;
+}
